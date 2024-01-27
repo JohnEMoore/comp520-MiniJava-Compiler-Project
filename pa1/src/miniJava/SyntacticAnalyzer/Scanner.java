@@ -31,33 +31,159 @@ public class Scanner {
 		//  keep calling takeIt() until _currentChar is not a number. Then
 		//  create the token via makeToken(TokenType.IntegerLiteral) and return it.
 
-		while _currentChar != null && _currentChar == ' '{
+		if(_currentChar == null){
+			return null;
+		}
+
+		while (Character.isWhitespace(_currentChar)){
 			skipIt();
 		}
-		/* Should I store previous characters to see if there is a comment that happens? */
-		// if i do I can skip while in commentmode and once there is an end of the block or it stops I continue as normal
 
-		_currentText == new StringBuilder();
-		TokenType tokType = null;
-		String lexType = null;
 
-		while(_currentChar != null && _currentChar != ' '){
-			//decide what token this is
-			if lexType == null{
-
-				if (30 <= _currentChar &&  _currentChar <= 39)
-					lexType = "number";
-				if (65 <= _currentChar && _currentChar<= 90 || 97 <= _currentChar && _currentChar <= 122)
-					lexType = "alphanumeric"; // some way to classify token before it is complete
-
-			}
-			// if lexType is decided, see if the new character breaks the pattern (such as a letter after a number and break
-
+		if (_currentChar == '/'){
 			takeIt();
+			if (_currentChar == '/'){
+				while(_currentChar != '\n'){
+					skipIt();
+				}
+				return scan();
+			}
+			if(_currentChar == '*'){
+				while(true){
+					if(_currentChar == '*'){
+						skipIt();
+						if(_currentChar == '/'){
+							skipIt();
+							return scan()
+						}
+					}
+				}
+			}
+
+			return makeToken(TokenType.OPERATOR, _currentText)
 		}
 
-		if (_currentText.length() != 0){
-			return makeToken(tokType);
+		if (Character.isDigit(_currentChar)) {
+			takeIt();
+			while(_currentChar.isDigit()){
+				takeIt();
+			}
+			return makeToken(TokenType.INTLITERAL, _currentText);
+		}
+		if(Character.isAlphabetic()){
+			takeIt();
+			while(_currentChar.isLetterOrDigit() || _currentChar =='_'){
+				takeIt();
+				}
+			TokenType tokType = null;
+			switch (_currentText){
+				case 'static':
+					tokType = TokenType.ACCESS;
+				case 'class':
+					tokType = TokenType.CLASS;
+				case 'else':
+					tokType = TokenType.ELSE;
+				case 'false':
+					tokType = TokenType.FALSE;
+				case 'true':
+					tokType = TokenType.True;
+				case 'if':
+					tokType = TokenType.IF;
+
+				case 'new':
+					tokType = TokenType.NEW;
+
+				case 'this':
+					tokType = TokenType.THIS;
+				case 'int':
+					tokType = TokenType.INTEGER;
+				case 'boolean':
+					tokType = TokenType.BOOLEAN;
+				case 'return':
+					tokType = TokenType.RETURN;
+				case 'public':
+				case 'private':
+					tokType = TokenType.VISIBILTY;
+				case 'void':
+					tokType = TokenType.VOID;
+				case 'while':
+					tokType = TokenType.WHILE;
+				default:
+					tokType = TokenType.ID;
+				return makeToken(tokType, _currentText);
+			}
+		}
+
+		else {
+			switch (_currentText) {
+
+				case ',':
+					takeIt();
+					return makeToken(TokenType.COMMA);
+				case '[':
+					takeIt();
+					return makeToken(TokenType.LBLOCK)
+				case '{'
+					takeIt();
+					return makeToken(TokenType.LCURLY);
+				case '(':
+					takeIt();
+					return makeToken(TokenType.LPAREN);
+				case '!':
+					takeIt();
+					return makeToken(TokenType.OPERATOR);
+				case '+':
+					takeIt();
+					return makeToken(TokenType.OPERATOR);
+				case '-':
+					takeIt();
+					return makeToken(TokenType.OPERATOR);
+				case '*':
+					takeIt();
+					return makeToken(TokenType.OPERATOR);
+				case '>':
+				case '<':
+				case '!':
+					takeIt();
+					if(_currentChar == '='){
+						takeIt();
+						return makeToken(TokenType.OPERATOR);
+					}
+					return makeToken(TokenType.OPERATOR);
+				case '=':
+					if(_currentChar == '='){
+						takeIt();
+						return makeToken(TokenType.OPERATOR);
+					}
+					return  makeToken(TokenType.EQUALS);
+				case '&':
+					takeIt();
+					if(_currentChar == '&'){
+						takeIt();
+						return makeToken(TokenType.OPERATOR);
+					}
+					throw Error;
+				case '|':
+					takeIt();
+					if(_currentChar == '|'){
+						takeIt();
+						return makeToken(TokenType.OPERATOR);
+					}
+					throw Error;
+				case ']':
+					takeIt();
+					return makeToken(TokenType.RBLOCK);
+				case '}':
+					takeIt();
+					return makeToken(TokenType.RCURLY);
+				case ')':
+					takeIt();
+					return makeToken(TokenType.RPAREN);
+				case ';':
+					takeIt();
+					return makeToken(TokenType.SEMICOLON);
+
+			}
 		}
 
 
@@ -83,16 +209,17 @@ public class Scanner {
 			
 			// TODO: What happens if c == -1?
 
-			if c == -1{
+			if (c == -1){
 				//stop getting input
 				// should I check if there is a semicolon
 				_currentChar = null;
 			}
-
 			// TODO: What happens if c is not a regular ASCII character?
+			if (c >= 127){
+				//non ascii throw error
+				throw new UnmappableCharacterException();
+			}
 
-			// /doesn't that just throw an error that is getting caught anyway?
-			
 		} catch( IOException e ) {
 			// TODO: Report an error here
 		}
@@ -100,7 +227,10 @@ public class Scanner {
 	
 	private Token makeToken( TokenType toktype ) {
 		// TODO: return a new Token with the appropriate type and text
-		//  contained in 
-		return new Token(toktype, _currentText)
+		//  contained in
+
+		Token myToken = new Token(toktype, _currentText.toString());
+		_currentText = new StringBuilder();
+		return myToken;
 	}
 }

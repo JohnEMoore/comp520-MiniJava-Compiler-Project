@@ -6,7 +6,7 @@ public class Token {
 	
 	public Token(TokenType type, String text) {
 		this._type = type;
-		this._text = text
+		this._text = text;
 	}
 	
 	public TokenType getTokenType() {
