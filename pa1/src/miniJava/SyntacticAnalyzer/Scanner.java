@@ -9,6 +9,8 @@ public class Scanner {
 	private ErrorReporter _errors;
 	private StringBuilder _currentText;
 	private char _currentChar;
+
+	private boolean EOT = False;
 	
 	public Scanner( InputStream in, ErrorReporter errors ) {
 		this._in = in;
@@ -31,8 +33,14 @@ public class Scanner {
 		//  keep calling takeIt() until _currentChar is not a number. Then
 		//  create the token via makeToken(TokenType.IntegerLiteral) and return it.
 
-		if(_currentChar == null){
+		if(EOT == True){
+
 			return null;
+		}
+
+		if(_currentChar == "\4"){
+			EOT = True;
+			return makeToken(TokenType.EOT);
 		}
 
 		while (Character.isWhitespace(_currentChar)){
@@ -212,12 +220,13 @@ public class Scanner {
 			if (c == -1){
 				//stop getting input
 				// should I check if there is a semicolon
-				_currentChar = null;
+				_currentChar = "\4";
 			}
 			// TODO: What happens if c is not a regular ASCII character?
 			if (c >= 127){
 				//non ascii throw error
-				throw new UnmappableCharacterException();
+				//throw new UnmappableCharacterException();
+				_errors.reportError("Unmappable Character Exception")
 			}
 
 		} catch( IOException e ) {
