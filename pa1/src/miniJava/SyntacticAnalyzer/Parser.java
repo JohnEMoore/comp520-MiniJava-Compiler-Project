@@ -57,17 +57,17 @@ public class Parser {
 			accept(TokenType.VOID);
 			accept(TokenType.ID);
 			accept(TokenType.LPAREN);
-			while (_currentToken.getTokenType() != TokenType.RPAREN) {
+			if (_currentToken.getTokenType() != TokenType.RPAREN) {
 				// at least one parameter
 				parseParameterList();
 			}
+			accept(TokenType.RPAREN);
 			accept(TokenType.LCURLY);
 			while (_currentToken.getTokenType() != TokenType.RCURLY) {
 				parseStatement();
 			}
-			accept(TokenType.RCURLY);
 		}
-		else{
+		else if(_currentToken.getTokenType() == TokenType.INTEGER || _currentToken.getTokenType() == TokenType.BOOLEAN || _currentToken.getTokenType() == TokenType.ID){
 			// could be method or field
 			parseType();
 			accept(TokenType.ID);
@@ -77,6 +77,16 @@ public class Parser {
 				case LPAREN:
 					//method
 					accept(TokenType.LPAREN);
+					if (_currentToken.getTokenType() != TokenType.RPAREN) {
+						// at least one parameter
+						parseParameterList();
+					}
+					accept(TokenType.RPAREN);
+					accept(TokenType.LCURLY);
+					while (_currentToken.getTokenType() != TokenType.RCURLY) {
+						parseStatement();
+					}
+
 				default:
 					//error
 
