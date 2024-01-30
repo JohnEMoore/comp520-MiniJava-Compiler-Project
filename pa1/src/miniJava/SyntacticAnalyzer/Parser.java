@@ -39,6 +39,7 @@ public class Parser {
 	private void parseClassDeclaration() throws SyntaxError {
 		// TODO: Take in a "class" token (check by the TokenType)
 		//  What should be done if the first token isn't "class"?
+
 		accept(TokenType.CLASS);
 
 		// TODO: Take in an identifier token
@@ -49,7 +50,7 @@ public class Parser {
 		if(_currentToken.getTokenType() == TokenType.VISIBILITY) {
 			accept(TokenType.VISIBILITY);
 		}
-		if(_currentToken.getTokenType() == TokenType.VISIBILITY) {
+		if(_currentToken.getTokenType() == TokenType.ACCESS) {
 			accept(TokenType.ACCESS);
 		}
 		if(_currentToken.getTokenType() == TokenType.VOID) {
@@ -88,7 +89,7 @@ public class Parser {
 					}
 
 				default:
-					//error
+					_errors.reportError("Expected Type for declaration");
 
 			}
 
