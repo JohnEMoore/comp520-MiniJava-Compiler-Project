@@ -162,7 +162,6 @@ public class Parser {
 				parseExpression();
 				accept(TokenType.RPAREN);
 				parseStatement();
-			case ID:
 			case THIS:
 				//REFERENCE generation
 				parseReference();
@@ -184,6 +183,42 @@ public class Parser {
 						accept(TokenType.RPAREN);
 						accept(TokenType.SEMICOLON);
 				}
+			case INTEGER:
+			case BOOLEAN:
+				parseType();
+				accept(TokenType.ID);
+				accept(TokenType.EQUALS);
+				parseExpression();
+			case ID:
+				// can be type or reference
+				accept(TokenType.ID);
+				if(_currentToken.getTokenType() == TokenType.PERIOD) {
+					parseReference();
+					switch (_currentToken.getTokenType()) {
+						case EQUALS:
+							accept(TokenType.EQUALS);
+							parseExpression();
+							accept(TokenType.SEMICOLON);
+						case LBLOCK:
+							accept(TokenType.LBLOCK);
+							parseExpression();
+							accept(TokenType.RBLOCK);
+							accept(TokenType.EQUALS);
+							parseExpression();
+							accept(TokenType.SEMICOLON);
+						case LPAREN:
+							accept(TokenType.LPAREN);
+							parseArgumentList();
+							accept(TokenType.RPAREN);
+							accept(TokenType.SEMICOLON);
+					}
+				}
+				else {
+					// parse between references and statements
+
+					}
+
+
 
 		}
 	}
