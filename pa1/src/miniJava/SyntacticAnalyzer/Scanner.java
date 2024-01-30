@@ -156,6 +156,7 @@ public class Scanner {
 					}
 					return makeToken(TokenType.OPERATOR);
 				case '=':
+					takeIt();
 					if(_currentChar == '='){
 						takeIt();
 						return makeToken(TokenType.OPERATOR);

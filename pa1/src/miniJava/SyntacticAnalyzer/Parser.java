@@ -212,11 +212,39 @@ public class Parser {
 							accept(TokenType.RPAREN);
 							accept(TokenType.SEMICOLON);
 					}
-				}
-				else {
-					// parse between references and statements
+				} else if (_currentToken.getTokenType() == TokenType.LPAREN) {
+					accept(TokenType.LPAREN);
+					parseArgumentList();
+					accept(TokenType.RPAREN);
+					accept(TokenType.SEMICOLON);
+
+				} else if (_currentToken.getTokenType() == TokenType.EQUALS){
+
+					accept(TokenType.EQUALS);
+					parseExpression();
 
 					}
+				else if (_currentToken.getTokenType() == TokenType.ID) {
+					//first id was type this is the id Type id = Expression;
+					accept(TokenType.ID);
+					accept(TokenType.EQUALS);
+					parseExpression();
+					accept(TokenType.SEMICOLON);
+				} else if (_currentToken.getTokenType() == TokenType.LBLOCK) {
+					accept(TokenType.LBLOCK);
+					if(_currentToken.getTokenType() == TokenType.RBLOCK){
+						//TYPE
+						accept(TokenType.RBLOCK);
+						accept(TokenType.ID);
+						accept(TokenType.EQUALS);
+						parseExpression();
+						accept(TokenType.SEMICOLON);
+					}
+					else {
+						parseExpression();
+						accept(TokenType.RBLOCK);
+					}
+		}
 
 
 
