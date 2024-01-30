@@ -21,7 +21,9 @@ public class Parser {
 		try {
 			// The first thing we need to parse is the Program symbol
 			parseProgram();
-		} catch( SyntaxError e ) { }
+		} catch( Throwable e ) {
+			_errors.reportError("Missing tokens");
+		}
 	}
 	
 	// Program ::= (ClassDeclaration)* eot
@@ -67,6 +69,9 @@ public class Parser {
 			while (_currentToken.getTokenType() != TokenType.RCURLY) {
 				parseStatement();
 			}
+			accept(TokenType.RCURLY);
+
+
 		}
 		else if(_currentToken.getTokenType() == TokenType.INTEGER || _currentToken.getTokenType() == TokenType.BOOLEAN || _currentToken.getTokenType() == TokenType.ID){
 			// could be method or field
@@ -75,6 +80,7 @@ public class Parser {
 			switch (_currentToken.getTokenType()){
 				case  SEMICOLON:
 					accept(TokenType.SEMICOLON);
+					break;
 				case LPAREN:
 					//method
 					accept(TokenType.LPAREN);
@@ -87,6 +93,8 @@ public class Parser {
 					while (_currentToken.getTokenType() != TokenType.RCURLY) {
 						parseStatement();
 					}
+					accept(TokenType.RCURLY);
+					break;
 
 				default:
 					_errors.reportError("Expected Type for declaration");
@@ -110,12 +118,14 @@ public class Parser {
 					accept(TokenType.LBLOCK);
 					accept(TokenType.RBLOCK);
 				}
+				break;
 			case ID:
 				accept(TokenType.ID);
 				if(_currentToken.getTokenType() == TokenType.LBLOCK){
 					accept(TokenType.LBLOCK);
 					accept(TokenType.RBLOCK);
 				}
+				break;
 			case BOOLEAN:
 				accept(TokenType.BOOLEAN);
 
@@ -140,12 +150,14 @@ public class Parser {
 					parseStatement();
 				}
 				accept(TokenType.RCURLY);
+				break;
 			case RETURN:
 				accept(TokenType.RETURN);
 				if(_currentToken.getTokenType() != TokenType.SEMICOLON){
 					parseExpression();
 				}
 				accept(TokenType.SEMICOLON);
+				break;
 			case IF:
 				accept(TokenType.IF);
 				accept(TokenType.LPAREN);
@@ -156,12 +168,14 @@ public class Parser {
 					accept(TokenType.ELSE);
 					parseStatement();
 				}
+				break;
 			case WHILE:
 				accept(TokenType.WHILE);
 				accept(TokenType.LPAREN);
 				parseExpression();
 				accept(TokenType.RPAREN);
 				parseStatement();
+				break;
 			case THIS:
 				//REFERENCE generation
 				parseReference();
@@ -170,6 +184,7 @@ public class Parser {
 						accept(TokenType.EQUALS);
 						parseExpression();
 						accept(TokenType.SEMICOLON);
+						break;
 					case LBLOCK:
 						accept(TokenType.LBLOCK);
 						parseExpression();
@@ -177,18 +192,23 @@ public class Parser {
 						accept(TokenType.EQUALS);
 						parseExpression();
 						accept(TokenType.SEMICOLON);
+						break;
 					case LPAREN:
 						accept(TokenType.LPAREN);
 						parseArgumentList();
 						accept(TokenType.RPAREN);
 						accept(TokenType.SEMICOLON);
+						break;
 				}
+				break;
 			case INTEGER:
 			case BOOLEAN:
 				parseType();
 				accept(TokenType.ID);
 				accept(TokenType.EQUALS);
 				parseExpression();
+				accept(TokenType.SEMICOLON);
+				break;
 			case ID:
 				// can be type or reference
 				accept(TokenType.ID);
@@ -199,6 +219,7 @@ public class Parser {
 							accept(TokenType.EQUALS);
 							parseExpression();
 							accept(TokenType.SEMICOLON);
+							break;
 						case LBLOCK:
 							accept(TokenType.LBLOCK);
 							parseExpression();
@@ -206,11 +227,13 @@ public class Parser {
 							accept(TokenType.EQUALS);
 							parseExpression();
 							accept(TokenType.SEMICOLON);
+							break;
 						case LPAREN:
 							accept(TokenType.LPAREN);
 							parseArgumentList();
 							accept(TokenType.RPAREN);
 							accept(TokenType.SEMICOLON);
+							break;
 					}
 				} else if (_currentToken.getTokenType() == TokenType.LPAREN) {
 					accept(TokenType.LPAREN);
@@ -275,17 +298,22 @@ public class Parser {
 		switch (_currentToken.getTokenType()){
 			case INTLITERAL:
 				accept(TokenType.INTLITERAL);
+				break;
 			case TRUE:
 				accept(TokenType.TRUE);
+				break;
 			case FALSE:
 				accept(TokenType.FALSE);
+				break;
 			case LPAREN:
 				accept(TokenType.LPAREN);
 				parseExpression();
 				accept(TokenType.RPAREN);
+				break;
 			case OPERATOR:
 				accept(TokenType.OPERATOR);
 				parseExpression();
+				break;
 			case NEW:
 				accept(TokenType.NEW);
 				switch (_currentToken.getTokenType()){
@@ -306,6 +334,7 @@ public class Parser {
 						parseExpression();
 						accept(TokenType.RBLOCK);
 				}
+				break;
 			case ID:
 			case THIS:
 				parseReference();
@@ -320,6 +349,7 @@ public class Parser {
 					parseExpression();
 					accept(TokenType.RBLOCK);
 				}
+				break;
 
 
 		}
@@ -340,6 +370,7 @@ public class Parser {
 		// TODO: Report an error here.
 		//  "Expected token X, but got Y"
 		//throw new SyntaxError();
-		_errors.reportError("Expected %s, but got %s", expectedType.toString(), _currentToken.toString());
+		_errors.reportError(String.format("Expected %s, but got %s", expectedType.name(), _currentToken.getTokenText()));
+		throw new SyntaxError();
 	}
 }

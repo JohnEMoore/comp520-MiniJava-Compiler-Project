@@ -38,10 +38,7 @@ public class Scanner {
 			return null;
 		}
 
-		if(_currentChar == '\4'){
-			EOT = true;
-			return makeToken(TokenType.EOT);
-		}
+
 
 		while (Character.isWhitespace(_currentChar)){
 			skipIt();
@@ -51,12 +48,16 @@ public class Scanner {
 		if (_currentChar == '/'){
 			takeIt();
 			if (_currentChar == '/'){
+				skipIt();
+				_currentText = new StringBuilder();
 				while(_currentChar != '\n'){
 					skipIt();
 				}
 				return scan();
 			}
 			if(_currentChar == '*'){
+				_currentText = new StringBuilder();
+				skipIt();
 				while(true){
 					if(_currentChar == '*'){
 						skipIt();
@@ -65,10 +66,18 @@ public class Scanner {
 							return scan();
 						}
 					}
+					else {
+						skipIt();
+					}
 				}
 			}
 
 			return makeToken(TokenType.OPERATOR);
+		}
+
+		if(_currentChar == '\u0004'){
+			EOT = true;
+			return makeToken(TokenType.EOT);
 		}
 
 		if (Character.isDigit(_currentChar)) {
@@ -84,42 +93,56 @@ public class Scanner {
 				takeIt();
 				}
 			TokenType tokType = null;
-			switch (_currentText.toString()){
+			String cur = _currentText.toString();
+			switch (cur){
 				case "static":
 					tokType = TokenType.ACCESS;
+					break;
 				case "class":
 					tokType = TokenType.CLASS;
+					break;
 				case "else":
 					tokType = TokenType.ELSE;
+					break;
 				case "false":
 					tokType = TokenType.FALSE;
+					break;
 				case "true":
 					tokType = TokenType.TRUE;
+					break;
 				case "if":
 					tokType = TokenType.IF;
-
+					break;
 				case "new":
 					tokType = TokenType.NEW;
-
+					break;
 				case "this":
 					tokType = TokenType.THIS;
+					break;
 				case "int":
 					tokType = TokenType.INTEGER;
+					break;
 				case "boolean":
 					tokType = TokenType.BOOLEAN;
+					break;
 				case "return":
 					tokType = TokenType.RETURN;
+					break;
 				case "public":
 				case "private":
 					tokType = TokenType.VISIBILITY;
+					break;
 				case "void":
 					tokType = TokenType.VOID;
+					break;
 				case "while":
 					tokType = TokenType.WHILE;
+					break;
 				default:
 					tokType = TokenType.ID;
-				return makeToken(tokType);
+
 			}
+			return makeToken(tokType);
 		}
 
 		else {
@@ -188,6 +211,9 @@ public class Scanner {
 				case ';':
 					takeIt();
 					return makeToken(TokenType.SEMICOLON);
+				default:
+					_errors.reportError("Invalid token");
+
 
 			}
 		}
