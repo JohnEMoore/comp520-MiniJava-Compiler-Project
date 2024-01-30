@@ -33,7 +33,7 @@ public class Scanner {
 		//  keep calling takeIt() until _currentChar is not a number. Then
 		//  create the token via makeToken(TokenType.IntegerLiteral) and return it.
 
-		if(EOT == true){
+		if(EOT){
 
 			return null;
 		}
@@ -51,6 +51,10 @@ public class Scanner {
 				skipIt();
 				_currentText = new StringBuilder();
 				while(_currentChar != '\n'){
+					if (_currentChar == '\u0004'){
+						takeIt();
+						return makeToken(TokenType.EOT);
+					}
 					skipIt();
 				}
 				return scan();

@@ -22,7 +22,7 @@ public class Parser {
 			// The first thing we need to parse is the Program symbol
 			parseProgram();
 		} catch( Throwable e ) {
-			_errors.reportError("Missing tokens");
+			_errors.reportError("Invalid token");
 		}
 	}
 	
@@ -272,6 +272,7 @@ public class Parser {
 
 
 		}
+		accept(TokenType.ID);
 	}
 
 	private void parseArgumentList(){
