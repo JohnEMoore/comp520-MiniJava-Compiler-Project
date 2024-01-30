@@ -21,8 +21,9 @@ public class ErrorReporter {
 	
 	public void outputErrors() {
 		// TODO: output all errors in the errorQueue
-		for e in _errorQueue:
-			System.out.println(e);
+		for (int i = 0; i < _errorQueue.size(); i++){
+			System.out.println(_errorQueue.get(i));
+		}
 
 	}
 	

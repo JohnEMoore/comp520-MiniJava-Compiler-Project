@@ -10,7 +10,7 @@ public class Scanner {
 	private StringBuilder _currentText;
 	private char _currentChar;
 
-	private boolean EOT = False;
+	private boolean EOT = false;
 	
 	public Scanner( InputStream in, ErrorReporter errors ) {
 		this._in = in;
@@ -33,13 +33,13 @@ public class Scanner {
 		//  keep calling takeIt() until _currentChar is not a number. Then
 		//  create the token via makeToken(TokenType.IntegerLiteral) and return it.
 
-		if(EOT == True){
+		if(EOT == true){
 
 			return null;
 		}
 
-		if(_currentChar == "\4"){
-			EOT = True;
+		if(_currentChar == '\4'){
+			EOT = true;
 			return makeToken(TokenType.EOT);
 		}
 
@@ -62,84 +62,81 @@ public class Scanner {
 						skipIt();
 						if(_currentChar == '/'){
 							skipIt();
-							return scan()
+							return scan();
 						}
 					}
 				}
 			}
 
-			return makeToken(TokenType.OPERATOR, _currentText)
+			return makeToken(TokenType.OPERATOR);
 		}
 
 		if (Character.isDigit(_currentChar)) {
 			takeIt();
-			while(_currentChar.isDigit()){
+			while(Character.isDigit(_currentChar)){
 				takeIt();
 			}
-			return makeToken(TokenType.INTLITERAL, _currentText);
+			return makeToken(TokenType.INTLITERAL);
 		}
-		if(Character.isAlphabetic()){
+		if(Character.isAlphabetic(_currentChar)){
 			takeIt();
-			while(_currentChar.isLetterOrDigit() || _currentChar =='_'){
+			while(Character.isLetterOrDigit(_currentChar) || _currentChar =='_'){
 				takeIt();
 				}
 			TokenType tokType = null;
-			switch (_currentText){
-				case 'static':
+			switch (_currentText.toString()){
+				case "static":
 					tokType = TokenType.ACCESS;
-				case 'class':
+				case "class":
 					tokType = TokenType.CLASS;
-				case 'else':
+				case "else":
 					tokType = TokenType.ELSE;
-				case 'false':
+				case "false":
 					tokType = TokenType.FALSE;
-				case 'true':
-					tokType = TokenType.True;
-				case 'if':
+				case "true":
+					tokType = TokenType.TRUE;
+				case "if":
 					tokType = TokenType.IF;
 
-				case 'new':
+				case "new":
 					tokType = TokenType.NEW;
 
-				case 'this':
+				case "this":
 					tokType = TokenType.THIS;
-				case 'int':
+				case "int":
 					tokType = TokenType.INTEGER;
-				case 'boolean':
+				case "boolean":
 					tokType = TokenType.BOOLEAN;
-				case 'return':
+				case "return":
 					tokType = TokenType.RETURN;
-				case 'public':
-				case 'private':
-					tokType = TokenType.VISIBILTY;
-				case 'void':
+				case "public":
+				case "private":
+					tokType = TokenType.VISIBILITY;
+				case "void":
 					tokType = TokenType.VOID;
-				case 'while':
+				case "while":
 					tokType = TokenType.WHILE;
 				default:
 					tokType = TokenType.ID;
-				return makeToken(tokType, _currentText);
+				return makeToken(tokType);
 			}
 		}
 
 		else {
-			switch (_currentText) {
+			switch (_currentChar) {
 
 				case ',':
 					takeIt();
 					return makeToken(TokenType.COMMA);
 				case '[':
 					takeIt();
-					return makeToken(TokenType.LBLOCK)
-				case '{'
+					return makeToken(TokenType.LBLOCK);
+				case '{':
 					takeIt();
 					return makeToken(TokenType.LCURLY);
 				case '(':
 					takeIt();
 					return makeToken(TokenType.LPAREN);
-				case '!':
-					takeIt();
-					return makeToken(TokenType.OPERATOR);
 				case '+':
 					takeIt();
 					return makeToken(TokenType.OPERATOR);
@@ -170,14 +167,14 @@ public class Scanner {
 						takeIt();
 						return makeToken(TokenType.OPERATOR);
 					}
-					throw Error;
+					_errors.reportError("Invalid Token Exception");
 				case '|':
 					takeIt();
 					if(_currentChar == '|'){
 						takeIt();
 						return makeToken(TokenType.OPERATOR);
 					}
-					throw Error;
+					_errors.reportError("Invalid Token Exception");
 				case ']':
 					takeIt();
 					return makeToken(TokenType.RBLOCK);
@@ -218,15 +215,13 @@ public class Scanner {
 			// TODO: What happens if c == -1?
 
 			if (c == -1){
-				//stop getting input
-				// should I check if there is a semicolon
-				_currentChar = "\4";
+				_currentChar = '\4';
 			}
 			// TODO: What happens if c is not a regular ASCII character?
 			if (c >= 127){
 				//non ascii throw error
 				//throw new UnmappableCharacterException();
-				_errors.reportError("Unmappable Character Exception")
+				_errors.reportError("Unmappable Character Exception");
 			}
 
 		} catch( IOException e ) {
