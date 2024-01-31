@@ -26,6 +26,7 @@ public enum TokenType {
     IF,
     INTEGER,
     INTLITERAL,
+    INVALIDTOKEN,
     LBLOCK,
     LCURLY,
     LPAREN,

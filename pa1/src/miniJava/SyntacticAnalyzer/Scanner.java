@@ -11,6 +11,8 @@ public class Scanner {
 	private char _currentChar;
 
 	private boolean EOT = false;
+	public int line = 1;
+	public int column = 0;
 	
 	public Scanner( InputStream in, ErrorReporter errors ) {
 		this._in = in;
@@ -41,6 +43,7 @@ public class Scanner {
 
 
 		while (Character.isWhitespace(_currentChar)){
+
 			skipIt();
 		}
 
@@ -57,6 +60,7 @@ public class Scanner {
 					}
 					skipIt();
 				}
+
 				return scan();
 			}
 			if(_currentChar == '*'){
@@ -195,14 +199,18 @@ public class Scanner {
 						takeIt();
 						return makeToken(TokenType.OPERATOR);
 					}
-					_errors.reportError("Invalid Token Exception");
+					_currentText = new StringBuilder();
+					_currentText.append("Invalid Token Type");
+					return makeToken(TokenType.INVALIDTOKEN);
 				case '|':
 					takeIt();
 					if(_currentChar == '|'){
 						takeIt();
 						return makeToken(TokenType.OPERATOR);
 					}
-					_errors.reportError("Invalid Token Exception");
+					_currentText = new StringBuilder();
+					_currentText.append("Invalid Token Type");
+					return makeToken(TokenType.INVALIDTOKEN);
 				case ']':
 					takeIt();
 					return makeToken(TokenType.RBLOCK);
@@ -219,25 +227,29 @@ public class Scanner {
 					takeIt();
 					return makeToken(TokenType.PERIOD);
 				default:
-					_errors.reportError("Invalid token");
+					_currentText.append("Invalid Token Type");
+					return makeToken(TokenType.INVALIDTOKEN);
 
 
 			}
 		}
 
-
-
-
-
-		return null;
 	}
 	
 	private void takeIt() {
+		this.column += 1;
 		_currentText.append(_currentChar);
 		nextChar();
 	}
 	
 	private void skipIt() {
+		if (_currentChar == '\n'){
+			this.line += 1;
+			this.column = 0;
+		}
+		else{
+			this.column += 1;
+		}
 		nextChar();
 	}
 	
@@ -256,6 +268,7 @@ public class Scanner {
 				//non ascii throw error
 				//throw new UnmappableCharacterException();
 				_errors.reportError("Unmappable Character Exception");
+				throw new Error();
 			}
 
 		} catch( IOException e ) {

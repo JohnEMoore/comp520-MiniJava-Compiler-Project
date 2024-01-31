@@ -22,7 +22,7 @@ public class Parser {
 			// The first thing we need to parse is the Program symbol
 			parseProgram();
 		} catch( Throwable e ) {
-			_errors.reportError("Invalid token");
+			//_errors.reportError("Invalid token");
 		}
 	}
 	
@@ -104,7 +104,12 @@ public class Parser {
 
 			}
 			else{
-				_errors.reportError("Invalid Type");
+				if(_currentToken.getTokenType() == TokenType.EOT){
+					_errors.reportError("Didn't close braces");
+				}
+				else{
+					_errors.reportError("Expected field or method declaration but got " + _currentToken.getTokenType());
+				}
 				throw new Error();
 			}
 		}
@@ -391,7 +396,8 @@ public class Parser {
 		// TODO: Report an error here.
 		//  "Expected token X, but got Y"
 		//throw new SyntaxError();
-		_errors.reportError(String.format("Expected %s, but got %s", expectedType.name(), _currentToken.getTokenText()));
+		_errors.reportError(String.format("Expected %s, but got %s at %d, %d", expectedType.name(), _currentToken.getTokenText(), _scanner.line, _scanner.column));
 		throw new SyntaxError();
 	}
 }
+
