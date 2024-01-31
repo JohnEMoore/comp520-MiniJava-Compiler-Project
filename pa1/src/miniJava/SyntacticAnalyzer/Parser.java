@@ -49,6 +49,7 @@ public class Parser {
 		// TODO: Take in a {
 		accept(TokenType.LCURLY);
 		// TODO: Parse either a FieldDeclaration or MethodDeclaration
+
 		if(_currentToken.getTokenType() == TokenType.VISIBILITY) {
 			accept(TokenType.VISIBILITY);
 		}
@@ -313,9 +314,14 @@ public class Parser {
 				accept(TokenType.RPAREN);
 				break;
 			case OPERATOR:
-				accept(TokenType.OPERATOR);
-				parseExpression();
-				break;
+				if(_currentToken.getTokenText() == "!" || _currentToken.getTokenText() == "-") {
+					accept(TokenType.OPERATOR);
+					parseExpression();
+					break;
+				}
+				else{
+					_errors.reportError("Expected unary operator");
+				}
 			case NEW:
 				accept(TokenType.NEW);
 				switch (_currentToken.getTokenType()){
