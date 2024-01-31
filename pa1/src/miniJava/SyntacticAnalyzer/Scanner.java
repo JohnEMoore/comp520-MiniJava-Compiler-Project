@@ -215,6 +215,9 @@ public class Scanner {
 				case ';':
 					takeIt();
 					return makeToken(TokenType.SEMICOLON);
+				case '.':
+					takeIt();
+					return makeToken(TokenType.PERIOD);
 				default:
 					_errors.reportError("Invalid token");
 

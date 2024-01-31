@@ -29,7 +29,7 @@ public class Parser {
 	// Program ::= (ClassDeclaration)* eot
 	private void parseProgram() throws SyntaxError {
 		// TODO: Keep parsing class declarations until eot
-		if(_currentToken.getTokenType() != TokenType.EOT) {
+		while(_currentToken.getTokenType() != TokenType.EOT) {
 			parseClassDeclaration();
 		}
 
@@ -103,6 +103,10 @@ public class Parser {
 
 
 			}
+			else{
+				_errors.reportError("Invalid Type");
+				throw new Error();
+			}
 		}
 
 		// TODO: Take in a }
@@ -137,6 +141,7 @@ public class Parser {
 		parseType();
 		accept(TokenType.ID);
 		while (_currentToken.getTokenType() == TokenType.COMMA){
+			accept(TokenType.COMMA);
 			parseType();
 			accept(TokenType.ID);
 		}
@@ -213,6 +218,7 @@ public class Parser {
 				// can be type or reference
 				accept(TokenType.ID);
 				if(_currentToken.getTokenType() == TokenType.PERIOD) {
+
 					parseReference();
 					switch (_currentToken.getTokenType()) {
 						case EQUALS:
@@ -245,6 +251,7 @@ public class Parser {
 
 					accept(TokenType.EQUALS);
 					parseExpression();
+					accept(TokenType.SEMICOLON);
 
 					}
 				else if (_currentToken.getTokenType() == TokenType.ID) {
@@ -266,6 +273,9 @@ public class Parser {
 					else {
 						parseExpression();
 						accept(TokenType.RBLOCK);
+						accept(TokenType.EQUALS);
+						parseExpression();
+						accept(TokenType.SEMICOLON);
 					}
 
 		}
@@ -313,7 +323,7 @@ public class Parser {
 				accept(TokenType.RPAREN);
 				break;
 			case OPERATOR:
-				if(_currentToken.getTokenText() == "!" || _currentToken.getTokenText() == "-") {
+				if(_currentToken.getTokenText().equals("!") || _currentToken.getTokenText().equals("-")) {
 					accept(TokenType.OPERATOR);
 					parseExpression();
 					break;
@@ -335,11 +345,13 @@ public class Parser {
 							parseExpression();
 							accept(TokenType.RBLOCK);
 						}
+						break;
 					case INTEGER:
 						accept(TokenType.INTEGER);
 						accept(TokenType.LBLOCK);
 						parseExpression();
 						accept(TokenType.RBLOCK);
+						break;
 				}
 				break;
 			case ID:
@@ -351,11 +363,13 @@ public class Parser {
 						parseArgumentList();
 					}
 					accept(TokenType.RPAREN);
+
 				} else if (_currentToken.getTokenType() == TokenType.LBLOCK) {
 					accept(TokenType.LBLOCK);
 					parseExpression();
 					accept(TokenType.RBLOCK);
 				}
+
 				break;
 
 
