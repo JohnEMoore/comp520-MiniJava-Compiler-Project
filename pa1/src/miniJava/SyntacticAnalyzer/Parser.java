@@ -374,7 +374,7 @@ public class Parser {
 
 
 		}
-		if (_currentToken.getTokenType() == TokenType.OPERATOR){
+		if (_currentToken.getTokenType() == TokenType.OPERATOR && !_currentToken.getTokenText().equals("!") ){
 			accept(TokenType.OPERATOR);
 			parseExpression();
 		}
