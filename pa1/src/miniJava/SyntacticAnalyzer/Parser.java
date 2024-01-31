@@ -209,7 +209,7 @@ public class Parser {
 				parseExpression();
 				accept(TokenType.SEMICOLON);
 				break;
-			case ID:
+			default:
 				// can be type or reference
 				accept(TokenType.ID);
 				if(_currentToken.getTokenType() == TokenType.PERIOD) {
@@ -267,12 +267,13 @@ public class Parser {
 						parseExpression();
 						accept(TokenType.RBLOCK);
 					}
-		}
-
-
 
 		}
-		accept(TokenType.ID);
+
+
+
+		}
+
 	}
 
 	private void parseArgumentList(){
