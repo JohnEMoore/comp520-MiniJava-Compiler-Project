@@ -49,62 +49,61 @@ public class Parser {
 		// TODO: Take in a {
 		accept(TokenType.LCURLY);
 		// TODO: Parse either a FieldDeclaration or MethodDeclaration
+		while(_currentToken.getTokenType() != TokenType.RCURLY) {
+			if (_currentToken.getTokenType() == TokenType.VISIBILITY) {
+				accept(TokenType.VISIBILITY);
+			}
+			if (_currentToken.getTokenType() == TokenType.ACCESS) {
+				accept(TokenType.ACCESS);
+			}
+			if (_currentToken.getTokenType() == TokenType.VOID) {
+				//in a method
+				accept(TokenType.VOID);
+				accept(TokenType.ID);
+				accept(TokenType.LPAREN);
+				if (_currentToken.getTokenType() != TokenType.RPAREN) {
+					// at least one parameter
+					parseParameterList();
+				}
+				accept(TokenType.RPAREN);
+				accept(TokenType.LCURLY);
+				while (_currentToken.getTokenType() != TokenType.RCURLY) {
+					parseStatement();
+				}
+				accept(TokenType.RCURLY);
 
-		if(_currentToken.getTokenType() == TokenType.VISIBILITY) {
-			accept(TokenType.VISIBILITY);
+
+			} else if (_currentToken.getTokenType() == TokenType.INTEGER || _currentToken.getTokenType() == TokenType.BOOLEAN || _currentToken.getTokenType() == TokenType.ID) {
+				// could be method or field
+				parseType();
+				accept(TokenType.ID);
+				switch (_currentToken.getTokenType()) {
+					case SEMICOLON:
+						accept(TokenType.SEMICOLON);
+						break;
+					case LPAREN:
+						//method
+						accept(TokenType.LPAREN);
+						if (_currentToken.getTokenType() != TokenType.RPAREN) {
+							// at least one parameter
+							parseParameterList();
+						}
+						accept(TokenType.RPAREN);
+						accept(TokenType.LCURLY);
+						while (_currentToken.getTokenType() != TokenType.RCURLY) {
+							parseStatement();
+						}
+						accept(TokenType.RCURLY);
+						break;
+
+					default:
+						_errors.reportError("Expected Type for declaration");
+
+				}
+
+
+			}
 		}
-		if(_currentToken.getTokenType() == TokenType.ACCESS) {
-			accept(TokenType.ACCESS);
-		}
-		if(_currentToken.getTokenType() == TokenType.VOID) {
-			//in a method
-			accept(TokenType.VOID);
-			accept(TokenType.ID);
-			accept(TokenType.LPAREN);
-			if (_currentToken.getTokenType() != TokenType.RPAREN) {
-				// at least one parameter
-				parseParameterList();
-			}
-			accept(TokenType.RPAREN);
-			accept(TokenType.LCURLY);
-			while (_currentToken.getTokenType() != TokenType.RCURLY) {
-				parseStatement();
-			}
-			accept(TokenType.RCURLY);
-
-
-		}
-		else if(_currentToken.getTokenType() == TokenType.INTEGER || _currentToken.getTokenType() == TokenType.BOOLEAN || _currentToken.getTokenType() == TokenType.ID){
-			// could be method or field
-			parseType();
-			accept(TokenType.ID);
-			switch (_currentToken.getTokenType()){
-				case  SEMICOLON:
-					accept(TokenType.SEMICOLON);
-					break;
-				case LPAREN:
-					//method
-					accept(TokenType.LPAREN);
-					if (_currentToken.getTokenType() != TokenType.RPAREN) {
-						// at least one parameter
-						parseParameterList();
-					}
-					accept(TokenType.RPAREN);
-					accept(TokenType.LCURLY);
-					while (_currentToken.getTokenType() != TokenType.RCURLY) {
-						parseStatement();
-					}
-					accept(TokenType.RCURLY);
-					break;
-
-				default:
-					_errors.reportError("Expected Type for declaration");
-
-			}
-
-
-			}
-
 
 		// TODO: Take in a }
 		accept(TokenType.RCURLY);
