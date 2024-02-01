@@ -284,6 +284,9 @@ public class Parser {
 					}
 
 		}
+				else{
+					_errors.reportError(String.format("Invalid statement at %d, %d", _scanner.line, _scanner.column));
+				}
 
 
 
@@ -376,6 +379,8 @@ public class Parser {
 				}
 
 				break;
+			default:
+				_errors.reportError("Invalid expression");
 
 
 		}

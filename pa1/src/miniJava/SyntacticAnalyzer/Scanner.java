@@ -10,6 +10,8 @@ public class Scanner {
 	private StringBuilder _currentText;
 	private char _currentChar;
 
+	private StringBuilder _debug = new StringBuilder();
+
 	private boolean EOT = false;
 	public int line = 1;
 	public int column = 0;
@@ -257,6 +259,7 @@ public class Scanner {
 		try {
 			int c = _in.read();
 			_currentChar = (char)c;
+			_debug.append(_currentChar);
 			
 			// TODO: What happens if c == -1?
 
