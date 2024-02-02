@@ -205,7 +205,9 @@ public class Parser {
 						break;
 					case LPAREN:
 						accept(TokenType.LPAREN);
-						parseArgumentList();
+						if(_currentToken.getTokenType() != TokenType.RPAREN) {
+							parseArgumentList();
+						}
 						accept(TokenType.RPAREN);
 						accept(TokenType.SEMICOLON);
 						break;
@@ -241,14 +243,18 @@ public class Parser {
 							break;
 						case LPAREN:
 							accept(TokenType.LPAREN);
-							parseArgumentList();
+							if(_currentToken.getTokenType() != TokenType.RPAREN) {
+								parseArgumentList();
+							}
 							accept(TokenType.RPAREN);
 							accept(TokenType.SEMICOLON);
 							break;
 					}
 				} else if (_currentToken.getTokenType() == TokenType.LPAREN) {
 					accept(TokenType.LPAREN);
-					parseArgumentList();
+					if(_currentToken.getTokenType() != TokenType.RPAREN) {
+						parseArgumentList();
+					}
 					accept(TokenType.RPAREN);
 					accept(TokenType.SEMICOLON);
 
@@ -306,7 +312,7 @@ public class Parser {
 		if (_currentToken.getTokenType() == TokenType.ID){
 			accept(TokenType.ID);
 		}
-		else {
+		else if (_currentToken.getTokenType() == TokenType.THIS) {
 			accept(TokenType.THIS);
 		}
 		while(_currentToken.getTokenType() == TokenType.PERIOD){
@@ -380,7 +386,7 @@ public class Parser {
 
 				break;
 			default:
-				_errors.reportError("Invalid expression");
+				_errors.reportError("Invalid expression at " + _scanner.line + ", " + _scanner.column);
 
 
 		}
