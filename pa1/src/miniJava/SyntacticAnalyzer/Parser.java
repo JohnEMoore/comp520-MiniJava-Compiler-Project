@@ -306,7 +306,7 @@ public class Parser {
 		if (_currentToken.getTokenType() == TokenType.ID){
 			accept(TokenType.ID);
 		}
-		else if(_currentToken.getTokenType() == TokenType.THIS){
+		else {
 			accept(TokenType.THIS);
 		}
 		while(_currentToken.getTokenType() == TokenType.PERIOD){
