@@ -65,6 +65,7 @@ public class Scanner {
 
 				return scan();
 			}
+
 			if(_currentChar == '*'){
 				_currentText = new StringBuilder();
 				skipIt();
@@ -77,6 +78,10 @@ public class Scanner {
 						}
 					}
 					else {
+						if (_currentChar == '\u0004'){
+							takeIt();
+							return makeToken(TokenType.EOT);
+						}
 						skipIt();
 					}
 				}
