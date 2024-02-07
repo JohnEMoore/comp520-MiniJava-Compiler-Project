@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import miniJava.ErrorReporter;
 
+import static miniJava.SyntacticAnalyzer.TokenType.UNCLOSEDCOMMENTBLOCK;
+
 public class Scanner {
 	private InputStream _in;
 	private ErrorReporter _errors;
@@ -80,7 +82,7 @@ public class Scanner {
 					else {
 						if (_currentChar == '\u0004'){
 							takeIt();
-							return makeToken(TokenType.EOT);
+							return makeToken(UNCLOSEDCOMMENTBLOCK);
 						}
 						skipIt();
 					}

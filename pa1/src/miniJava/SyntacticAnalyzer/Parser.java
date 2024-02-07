@@ -403,11 +403,18 @@ public class Parser {
 			_currentToken = _scanner.scan();
 			return;
 		}
+
 		
 		// TODO: Report an error here.
 		//  "Expected token X, but got Y"
 		//throw new SyntaxError();
-		_errors.reportError(String.format("Expected %s, but got %s at %d, %d", expectedType.name(), _currentToken.getTokenText(), _scanner.line, _scanner.column));
+		if (_currentToken.getTokenType() == TokenType.UNCLOSEDCOMMENTBLOCK){
+			_errors.reportError(String.format("Unclosed block comment at %d, %d", _scanner.line, _scanner.column));
+		}
+		else {
+			_errors.reportError(String.format("Expected %s, but got %s at %d, %d", expectedType.name(), _currentToken.getTokenText(), _scanner.line, _scanner.column));
+
+		}
 		throw new SyntaxError();
 	}
 }

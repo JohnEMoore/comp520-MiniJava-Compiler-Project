@@ -40,6 +40,7 @@ public enum TokenType {
     SEMICOLON,
     THIS,
     TRUE,
+    UNCLOSEDCOMMENTBLOCK,
     VISIBILITY,
     VOID,
     WHILE
