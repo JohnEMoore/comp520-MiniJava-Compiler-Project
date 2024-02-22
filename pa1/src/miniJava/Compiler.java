@@ -41,12 +41,15 @@ public class Compiler {
 				}
 				// TODO: If there are no errors, println("Success")
 				else {
-					System.out.println("Success");
+					//System.out.println("Success");
 				}
 			}
 		}
 		catch (Error | FileNotFoundException e){
-
+			if (_errors.hasErrors()) {
+				System.out.println("Error");
+				_errors.outputErrors();
+			}
 		}
 	}
 }
