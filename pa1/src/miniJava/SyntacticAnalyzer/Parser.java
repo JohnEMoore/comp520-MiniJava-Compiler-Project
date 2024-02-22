@@ -74,13 +74,13 @@ public class Parser {
 			Boolean isPrivate = false;
 			String memberName = "";
 			if (_currentToken.getTokenType() == TokenType.VISIBILITY) {
-				if(_currentToken.getTokenText() == "private"){
+				if(_currentToken.getTokenText().equals("private")){
 					isPrivate = true;
 				}
 				accept(TokenType.VISIBILITY);
 			}
 			if (_currentToken.getTokenType() == TokenType.ACCESS) {
-				if(_currentToken.getTokenText() == "static"){
+				if(_currentToken.getTokenText().equals("static")){
 					isStatic = true;
 				}
 				accept(TokenType.ACCESS);
@@ -352,10 +352,7 @@ public class Parser {
 					}
 				else if (_currentToken.getTokenType() == TokenType.ID) {
 					//first id was type this is the id Type id = Expression;
-					accept(TokenType.ID);
-					accept(TokenType.EQUALS);
-					parseExpression();
-					accept(TokenType.SEMICOLON);
+
 
 
 
@@ -418,11 +415,12 @@ public class Parser {
 
 	private ExprList parseArgumentList(){
 		ExprList EList = new ExprList();
-		parseExpression();
+		EList.add(parseExpression());
 		while(_currentToken.getTokenType() == TokenType.COMMA){
 			accept(TokenType.COMMA);
-			parseExpression();
+			EList.add(parseExpression());
 		}
+
 		return EList;
 	}
 

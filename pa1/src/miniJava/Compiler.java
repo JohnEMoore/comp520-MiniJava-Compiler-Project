@@ -21,6 +21,7 @@ public class Compiler {
 				if (!source.isFile()) {
 					// throw error because path is wrong
 				}
+
 				// TODO: Create the inputStream using new FileInputStream
 				InputStream fileInputStream = new FileInputStream(source.toString());
 				// TODO: Instantiate the scanner with the input stream and error object
@@ -28,31 +29,35 @@ public class Compiler {
 				// TODO: Instantiate the parser with the scanner and error object
 				Parser myParser = new Parser(myScanner, _errors);
 				// TODO: Call the parser's parse function
-				ASTDisplay disp = new ASTDisplay();
-				Package ASTER = myParser.parse();
-				// TODO: Check if any errors exist, if so, println("Error")
-				//  then output the errors
+				try {
+					ASTDisplay disp = new ASTDisplay();
+					Package ASTER = myParser.parse();
+					// TODO: Check if any errors exist, if so, println("Error")
+					//  then output the errors
 
-				disp.showTree(ASTER);
 
-				if (_errors.hasErrors()) {
-					System.out.println("Error");
-					_errors.outputErrors();
-				}
-				// TODO: If there are no errors, println("Success")
-				else {
-					//System.out.println("Success");
+					if (_errors.hasErrors()) {
+						System.out.println("Error");
+						_errors.outputErrors();
+					}
+					else{
+						disp.showTree(ASTER);
+					}
+				} catch (Throwable e) {
+					_errors.reportError("Exception at " + myScanner.getPos().toString());
+					if (_errors.hasErrors()) {
+						System.out.println("Error");
+						_errors.outputErrors();
+					}
+					// TODO: If there are no errors, println("Success")
+
 				}
 			}
 		}
 		catch (Error | FileNotFoundException e){
 
 		}
-		catch(Exception e){
-			if (_errors.hasErrors()) {
-				System.out.println("Error");
-				_errors.outputErrors();
-			}
+
 		}
 	}
-}
+
