@@ -46,6 +46,9 @@ public class Compiler {
 			}
 		}
 		catch (Error | FileNotFoundException e){
+
+		}
+		catch(Exception e){
 			if (_errors.hasErrors()) {
 				System.out.println("Error");
 				_errors.outputErrors();

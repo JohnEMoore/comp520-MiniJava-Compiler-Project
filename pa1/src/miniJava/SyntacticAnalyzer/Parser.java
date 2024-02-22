@@ -9,6 +9,8 @@ public class Parser {
 	private ErrorReporter _errors;
 	private Token _currentToken;
 	private Token _prevToken;
+
+	private int precedence_level = 0;
 	
 	public Parser( Scanner scanner, ErrorReporter errors ) {
 		this._scanner = scanner;
@@ -124,8 +126,10 @@ public class Parser {
 						accept(TokenType.RPAREN);
 						accept(TokenType.LCURLY);
 						StatementList sl = new StatementList();
+						Statement stmne = null;
 						while (_currentToken.getTokenType() != TokenType.RCURLY) {
-							sl.add(parseStatement());
+							stmne = parseStatement();
+							sl.add(stmne);
 						}
 						accept(TokenType.RCURLY);
 						mdl.add(new MethodDecl(new FieldDecl(isPrivate, isStatic, TD, memberName, _prevToken.getTokenPosition()), pl, sl,  _prevToken.getTokenPosition()));
@@ -447,6 +451,9 @@ public class Parser {
 			accept(TokenType.ID);
 			old = qually;
 		}
+		if (qually == null){
+			return old;
+		}
 		return qually;
 	}
 	private Expression parseExpression(){
@@ -476,7 +483,19 @@ public class Parser {
 					accept(TokenType.OPERATOR);
 
 					Expression ex = parseExpression();
-					retting = new UnaryExpr(unop, ex, _prevToken.getTokenPosition());
+					if (ex instanceof  BinaryExpr ){
+						retting = ex;
+						if (((BinaryExpr) ex).left instanceof BinaryExpr){
+							while (((BinaryExpr) ex).left instanceof BinaryExpr){
+								ex = ((BinaryExpr) ex).left;
+							}
+							((BinaryExpr) ex).left = new UnaryExpr(unop, ((BinaryExpr) ex).left, _prevToken.getTokenPosition());
+						}
+						((BinaryExpr) ex).left = new UnaryExpr(unop, ((BinaryExpr) ex).left, _prevToken.getTokenPosition());
+					}
+					else {
+						retting = new UnaryExpr(unop, ex, _prevToken.getTokenPosition());
+					}
 				}
 				else{
 					_errors.reportError("Expected unary operator");
@@ -541,15 +560,53 @@ public class Parser {
 
 
 		}
-		if (_currentToken.getTokenType() == TokenType.OPERATOR && !_currentToken.getTokenText().equals("!") ){
-			Operator ops = new Operator(_currentToken);
-			accept(TokenType.OPERATOR);
-			BinaryExpr binexp = new BinaryExpr(ops, retting, parseExpression(), _prevToken.getTokenPosition());
-			return binexp;
+		int initPrec = precedence_level;
+
+		while(_currentToken.getTokenType() == TokenType.OPERATOR && !_currentToken.getTokenText().equals("!") ){
+			int nextPrec = precedenceTable();
+			if(nextPrec > precedence_level){
+				Operator ops = new Operator(_currentToken);
+				precedence_level = nextPrec;
+				accept(TokenType.OPERATOR);
+				BinaryExpr binexp = new BinaryExpr(ops, retting, parseExpression(), _prevToken.getTokenPosition());
+				retting = binexp;
+			}
+			else{
+				precedence_level = 0; // change precedence level to a linked list stack so it doesnt full reset here
+				return retting;
+			}
+
+
 		}
 		return retting;
 
 	}
+
+	private int precedenceTable(){
+		switch (_currentToken.getTokenText()){
+			case "||":
+				return 1;
+			case "&&":
+				return 2;
+			case "==":
+			case "!=":
+				return 3;
+			case "<=":
+			case "<":
+			case ">":
+			case ">=":
+				return 4;
+			case "-":
+			case"+":
+				return 5;
+			case "*":
+			case "/":
+				return 6;
+
+		}
+		return -1;
+	}
+
 	
 	// This method will accept the token and retrieve the next token.
 	//  Can be useful if you want to error check and accept all-in-one.
