@@ -4,18 +4,23 @@ import miniJava.AbstractSyntaxTrees.Package;
 import miniJava.AbstractSyntaxTrees.*;
 import miniJava.ErrorReporter;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 public class Parser {
 	private Scanner _scanner;
 	private ErrorReporter _errors;
 	private Token _currentToken;
 	private Token _prevToken;
 
-	private int precedence_level = 0;
-	
+	private ArrayList precedence_level = new ArrayList<Integer>();
+
 	public Parser( Scanner scanner, ErrorReporter errors ) {
 		this._scanner = scanner;
 		this._errors = errors;
 		this._currentToken = this._scanner.scan();
+		precedence_level.add(0);
 	}
 	
 	class SyntaxError extends Error {
@@ -560,13 +565,14 @@ public class Parser {
 
 
 		}
-		int initPrec = precedence_level;
 
+
+		int initSize = precedence_level.size();
 		while(_currentToken.getTokenType() == TokenType.OPERATOR && !_currentToken.getTokenText().equals("!") ){
-			int nextPrec = precedenceTable();
-			if(nextPrec > precedence_level){
+
+			if( (precedence_level.get(precedence_level.size() - 1)) < precedenceTable()){
 				Operator ops = new Operator(_currentToken);
-				precedence_level = nextPrec;
+				precedence_level.add(precedenceTable());
 				accept(TokenType.OPERATOR);
 				BinaryExpr binexp = new BinaryExpr(ops, retting, parseExpression(), _prevToken.getTokenPosition());
 				retting = binexp;
