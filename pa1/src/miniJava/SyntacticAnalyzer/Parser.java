@@ -14,13 +14,12 @@ public class Parser {
 	private Token _currentToken;
 	private Token _prevToken;
 
-	private ArrayList precedence_level = new ArrayList<Integer>();
+	private int precedence_level = 0;
 
 	public Parser( Scanner scanner, ErrorReporter errors ) {
 		this._scanner = scanner;
 		this._errors = errors;
 		this._currentToken = this._scanner.scan();
-		precedence_level.add(0);
 	}
 	
 	class SyntaxError extends Error {
@@ -567,18 +566,20 @@ public class Parser {
 		}
 
 
-		int initSize = precedence_level.size();
+		int initPrec = precedence_level;
+		int currentPrec = precedence_level;
 		while(_currentToken.getTokenType() == TokenType.OPERATOR && !_currentToken.getTokenText().equals("!") ){
 
-			if( (precedence_level.get(precedence_level.size() - 1)) < precedenceTable()){
+			if( precedence_level < precedenceTable()){
 				Operator ops = new Operator(_currentToken);
-				precedence_level.add(precedenceTable());
+				precedence_level = precedenceTable();
 				accept(TokenType.OPERATOR);
 				BinaryExpr binexp = new BinaryExpr(ops, retting, parseExpression(), _prevToken.getTokenPosition());
 				retting = binexp;
+				precedence_level = currentPrec;
 			}
 			else{
-				precedence_level = 0; // change precedence level to a linked list stack so it doesnt full reset here
+				precedence_level = initPrec; // change precedence level to a linked list stack so it doesnt full reset here
 				return retting;
 			}
 
