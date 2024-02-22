@@ -1,5 +1,7 @@
 package miniJava;
 
+import miniJava.AbstractSyntaxTrees.*;
+import miniJava.AbstractSyntaxTrees.Package;
 import miniJava.SyntacticAnalyzer.*;
 
 import java.io.File;
@@ -26,9 +28,13 @@ public class Compiler {
 				// TODO: Instantiate the parser with the scanner and error object
 				Parser myParser = new Parser(myScanner, _errors);
 				// TODO: Call the parser's parse function
-				myParser.parse();
+				ASTDisplay disp = new ASTDisplay();
+				Package ASTER = myParser.parse();
 				// TODO: Check if any errors exist, if so, println("Error")
 				//  then output the errors
+
+				disp.showTree(ASTER);
+
 				if (_errors.hasErrors()) {
 					System.out.println("Error");
 					_errors.outputErrors();

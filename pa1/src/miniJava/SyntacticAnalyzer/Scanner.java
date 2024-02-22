@@ -17,6 +17,8 @@ public class Scanner {
 	private boolean EOT = false;
 	public int line = 1;
 	public int column = 0;
+
+	private SourcePosition pos = new SourcePosition(line, column);
 	
 	public Scanner( InputStream in, ErrorReporter errors ) {
 		this._in = in;
@@ -290,8 +292,14 @@ public class Scanner {
 		// TODO: return a new Token with the appropriate type and text
 		//  contained in
 
-		Token myToken = new Token(toktype, _currentText.toString());
+		Token myToken = new Token(toktype, _currentText.toString(), new SourcePosition(line, column));
+
 		_currentText = new StringBuilder();
+
 		return myToken;
+	}
+
+	public SourcePosition getPos(){
+		return this.pos;
 	}
 }

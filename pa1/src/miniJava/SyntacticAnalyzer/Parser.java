@@ -1,11 +1,14 @@
 package miniJava.SyntacticAnalyzer;
 
+import miniJava.AbstractSyntaxTrees.Package;
+import miniJava.AbstractSyntaxTrees.*;
 import miniJava.ErrorReporter;
 
 public class Parser {
 	private Scanner _scanner;
 	private ErrorReporter _errors;
 	private Token _currentToken;
+	private Token _prevToken;
 	
 	public Parser( Scanner scanner, ErrorReporter errors ) {
 		this._scanner = scanner;
@@ -17,85 +20,116 @@ public class Parser {
 		private static final long serialVersionUID = -6461942006097999362L;
 	}
 	
-	public void parse() {
-		try {
-			// The first thing we need to parse is the Program symbol
-			parseProgram();
-		} catch( Throwable e ) {
-			//_errors.reportError("Invalid token");
-		}
+	public Package parse() {
+		Package retting = new Package(new ClassDeclList(), this._currentToken.getTokenPosition());
+
+		// The first thing we need to parse is the Program symbol
+		ClassDeclList progClasses = parseProgram();
+		return  new Package(progClasses , _scanner.getPos());
+
+
+
+
 	}
 	
 	// Program ::= (ClassDeclaration)* eot
-	private void parseProgram() throws SyntaxError {
+	private ClassDeclList parseProgram() throws SyntaxError {
 		// TODO: Keep parsing class declarations until eot
+		ClassDeclList ret = new ClassDeclList();
 		while(_currentToken.getTokenType() != TokenType.EOT) {
-			parseClassDeclaration();
+			ret.add(parseClassDeclaration());
 		}
 
 		accept((TokenType.EOT));
+		return ret;
 
 	}
 	
 	// ClassDeclaration ::= class identifier { (FieldDeclaration|MethodDeclaration)* }
-	private void parseClassDeclaration() throws SyntaxError {
+	private ClassDecl parseClassDeclaration() throws SyntaxError {
+		FieldDeclList fdl = new FieldDeclList();
+		MethodDeclList mdl = new MethodDeclList();
+
+
+
 		// TODO: Take in a "class" token (check by the TokenType)
 		//  What should be done if the first token isn't "class"?
 
 		accept(TokenType.CLASS);
 
 		// TODO: Take in an identifier token
+		String className = _currentToken.getTokenText();
 		accept(TokenType.ID);
 		// TODO: Take in a {
 		accept(TokenType.LCURLY);
 		// TODO: Parse either a FieldDeclaration or MethodDeclaration
 		while(_currentToken.getTokenType() != TokenType.RCURLY) {
+			Boolean isStatic = false;
+			Boolean isPrivate = false;
+			String memberName = "";
 			if (_currentToken.getTokenType() == TokenType.VISIBILITY) {
+				if(_currentToken.getTokenText() == "private"){
+					isPrivate = true;
+				}
 				accept(TokenType.VISIBILITY);
 			}
 			if (_currentToken.getTokenType() == TokenType.ACCESS) {
+				if(_currentToken.getTokenText() == "static"){
+					isStatic = true;
+				}
 				accept(TokenType.ACCESS);
 			}
 			if (_currentToken.getTokenType() == TokenType.VOID) {
 				//in a method
+				BaseType TD = new BaseType(TypeKind.VOID, _currentToken.getTokenPosition());
 				accept(TokenType.VOID);
+				memberName = _currentToken.getTokenText();
 				accept(TokenType.ID);
 				accept(TokenType.LPAREN);
+				ParameterDeclList pl = new ParameterDeclList();
 				if (_currentToken.getTokenType() != TokenType.RPAREN) {
 					// at least one parameter
-					parseParameterList();
+					pl = parseParameterList();
 				}
 				accept(TokenType.RPAREN);
 				accept(TokenType.LCURLY);
+				StatementList sl = new StatementList();
 				while (_currentToken.getTokenType() != TokenType.RCURLY) {
-					parseStatement();
+					sl.add(parseStatement());
 				}
 				accept(TokenType.RCURLY);
+
+				mdl.add(new MethodDecl(new FieldDecl(isPrivate, isStatic, TD, memberName, _prevToken.getTokenPosition()), pl, sl,  _prevToken.getTokenPosition()));
 
 
 			} else if (_currentToken.getTokenType() == TokenType.INTEGER || _currentToken.getTokenType() == TokenType.BOOLEAN || _currentToken.getTokenType() == TokenType.ID) {
 				// could be method or field
-				parseType();
+
+				TypeDenoter TD = parseType();
+				memberName = _currentToken.getTokenText();
 				accept(TokenType.ID);
 				switch (_currentToken.getTokenType()) {
 					case SEMICOLON:
 						accept(TokenType.SEMICOLON);
+						fdl.add(new FieldDecl(isPrivate, isStatic, TD, memberName, _prevToken.getTokenPosition()));
 						break;
 					case LPAREN:
 						//method
 						accept(TokenType.LPAREN);
+						ParameterDeclList pl = new ParameterDeclList();
 						if (_currentToken.getTokenType() != TokenType.RPAREN) {
 							// at least one parameter
-							parseParameterList();
+							pl = parseParameterList();
 						}
 						accept(TokenType.RPAREN);
 						accept(TokenType.LCURLY);
+						StatementList sl = new StatementList();
 						while (_currentToken.getTokenType() != TokenType.RCURLY) {
-							parseStatement();
+							sl.add(parseStatement());
 						}
 						accept(TokenType.RCURLY);
+						mdl.add(new MethodDecl(new FieldDecl(isPrivate, isStatic, TD, memberName, _prevToken.getTokenPosition()), pl, sl,  _prevToken.getTokenPosition()));
 						break;
-
 					default:
 						_errors.reportError("Expected Type for declaration");
 
@@ -113,156 +147,199 @@ public class Parser {
 				throw new Error();
 			}
 		}
-
+		ClassDecl classed = new ClassDecl(className, fdl, mdl, _currentToken.getTokenPosition());
 		// TODO: Take in a }
 		accept(TokenType.RCURLY);
+		return classed;
 
 	}
 
-	private void parseType() throws SyntaxError {
+	private TypeDenoter parseType() throws SyntaxError {
 		switch (_currentToken.getTokenType()){
 			case INTEGER:
+				TypeDenoter basedType = new BaseType(TypeKind.INT, this._currentToken.getTokenPosition());
 				accept(TokenType.INTEGER);
+
 				if(_currentToken.getTokenType() == TokenType.LBLOCK){
 					accept(TokenType.LBLOCK);
 					accept(TokenType.RBLOCK);
+					return new ArrayType(basedType, this._currentToken.getTokenPosition());
 				}
-				break;
+				return basedType;
+
 			case ID:
+				TypeDenoter classyType = new ClassType(new Identifier(this._currentToken), this._currentToken.getTokenPosition());
 				accept(TokenType.ID);
 				if(_currentToken.getTokenType() == TokenType.LBLOCK){
 					accept(TokenType.LBLOCK);
 					accept(TokenType.RBLOCK);
+					return new ArrayType(classyType, this._currentToken.getTokenPosition());
 				}
-				break;
-			case BOOLEAN:
+				return classyType;
+
+			default:
+				TypeDenoter boolType = new BaseType(TypeKind.BOOLEAN, this._currentToken.getTokenPosition());
 				accept(TokenType.BOOLEAN);
+				return boolType;
+
 
 
 		}
 	}
 
-	private void parseParameterList() throws SyntaxError {
-		parseType();
+	private ParameterDeclList parseParameterList() throws SyntaxError {
+		ParameterDeclList PDL = new ParameterDeclList();
+		TypeDenoter TD = parseType();
+		ParameterDecl PD = new ParameterDecl(TD, _currentToken.getTokenText(), _currentToken.getTokenPosition());
+		PDL.add(PD);
 		accept(TokenType.ID);
 		while (_currentToken.getTokenType() == TokenType.COMMA){
 			accept(TokenType.COMMA);
-			parseType();
+			TD = parseType();
+			PD = new ParameterDecl(TD, _currentToken.getTokenText(), _currentToken.getTokenPosition());
+			PDL.add(PD);
 			accept(TokenType.ID);
 		}
+		return PDL;
 	}
 
-	private void parseStatement(){
+	private Statement parseStatement(){
+
+
 		switch (_currentToken.getTokenType()){
 			case LCURLY:
 				accept(TokenType.LCURLY);
+				StatementList SL = new StatementList();
+				BlockStmt blckRet = new BlockStmt(SL, _currentToken.getTokenPosition());
 				while (_currentToken.getTokenType() != TokenType.RCURLY) {
-					parseStatement();
+					SL.add(parseStatement());
 				}
 				accept(TokenType.RCURLY);
-				break;
+				return blckRet;
+
 			case RETURN:
 				accept(TokenType.RETURN);
 				if(_currentToken.getTokenType() != TokenType.SEMICOLON){
-					parseExpression();
+					ReturnStmt retRet = new ReturnStmt(parseExpression(), this._currentToken.getTokenPosition());
+					accept(TokenType.SEMICOLON);
+					return retRet;
 				}
 				accept(TokenType.SEMICOLON);
-				break;
+				return new ReturnStmt(null, this._currentToken.getTokenPosition());
+
+
 			case IF:
 				accept(TokenType.IF);
 				accept(TokenType.LPAREN);
-				parseExpression();
+				Expression ifClause = parseExpression();
 				accept(TokenType.RPAREN);
-				parseStatement();
+				Statement ifStatement = parseStatement();
 				if(_currentToken.getTokenType() == TokenType.ELSE){
 					accept(TokenType.ELSE);
-					parseStatement();
+					Statement elseStatement = parseStatement();
+					return new IfStmt(ifClause, ifStatement, elseStatement, this._currentToken.getTokenPosition());
 				}
-				break;
+				else{
+					return new IfStmt(ifClause, ifStatement, this._currentToken.getTokenPosition());
+				}
 			case WHILE:
 				accept(TokenType.WHILE);
 				accept(TokenType.LPAREN);
-				parseExpression();
+				Expression cond = parseExpression();
 				accept(TokenType.RPAREN);
-				parseStatement();
-				break;
+				Statement wStatement = parseStatement();
+				return new WhileStmt(cond, wStatement, this._currentToken.getTokenPosition());
+
 			case THIS:
 				//REFERENCE generation
-				parseReference();
+				Reference ref = parseReference();
 				switch (_currentToken.getTokenType()){
 					case EQUALS:
 						accept(TokenType.EQUALS);
-						parseExpression();
+						Expression assignExp = parseExpression();
 						accept(TokenType.SEMICOLON);
-						break;
+						return new AssignStmt(ref, assignExp, this._currentToken.getTokenPosition());
 					case LBLOCK:
 						accept(TokenType.LBLOCK);
-						parseExpression();
+						Expression inExp = parseExpression();
 						accept(TokenType.RBLOCK);
 						accept(TokenType.EQUALS);
-						parseExpression();
+						Expression outExp = parseExpression();
 						accept(TokenType.SEMICOLON);
-						break;
+						return new IxAssignStmt(ref, inExp, outExp, _currentToken.getTokenPosition());
 					case LPAREN:
 						accept(TokenType.LPAREN);
+						ExprList ExpAL = new ExprList();
 						if(_currentToken.getTokenType() != TokenType.RPAREN) {
-							parseArgumentList();
+							ExpAL = parseArgumentList();
 						}
 						accept(TokenType.RPAREN);
 						accept(TokenType.SEMICOLON);
-						break;
+						return new CallStmt(ref, ExpAL, this._currentToken.getTokenPosition());
 				}
 				break;
 			case INTEGER:
 			case BOOLEAN:
-				parseType();
+				TypeDenoter t = parseType();
+				String varName = this._currentToken.getTokenText();
+				VarDecl varDec = new VarDecl(t, varName, this._currentToken.getTokenPosition());
 				accept(TokenType.ID);
 				accept(TokenType.EQUALS);
-				parseExpression();
+				Expression e = parseExpression();
+				VarDeclStmt vds = new VarDeclStmt(varDec, e, this._currentToken.getTokenPosition());
 				accept(TokenType.SEMICOLON);
-				break;
+				return vds;
+
 			default:
 				// can be type or reference
 				accept(TokenType.ID);
 				if(_currentToken.getTokenType() == TokenType.PERIOD) {
 
-					parseReference();
+					Reference reff = parseReference();
 					switch (_currentToken.getTokenType()) {
 						case EQUALS:
 							accept(TokenType.EQUALS);
-							parseExpression();
+							Expression assignExp = parseExpression();
 							accept(TokenType.SEMICOLON);
-							break;
+							return new AssignStmt(reff, assignExp, this._currentToken.getTokenPosition());
+
 						case LBLOCK:
 							accept(TokenType.LBLOCK);
-							parseExpression();
+							Expression inExp = parseExpression();
 							accept(TokenType.RBLOCK);
 							accept(TokenType.EQUALS);
-							parseExpression();
+							Expression outExp = parseExpression();
 							accept(TokenType.SEMICOLON);
-							break;
+							return new IxAssignStmt(reff, inExp, outExp, _currentToken.getTokenPosition());
+
 						case LPAREN:
 							accept(TokenType.LPAREN);
+							ExprList ExpAL = new ExprList();
 							if(_currentToken.getTokenType() != TokenType.RPAREN) {
-								parseArgumentList();
+								ExpAL = parseArgumentList();
 							}
 							accept(TokenType.RPAREN);
 							accept(TokenType.SEMICOLON);
-							break;
+							return new CallStmt(reff, ExpAL, this._currentToken.getTokenPosition());
 					}
 				} else if (_currentToken.getTokenType() == TokenType.LPAREN) {
+					Reference reff = parseReference();
 					accept(TokenType.LPAREN);
+					ExprList AList = new ExprList();
 					if(_currentToken.getTokenType() != TokenType.RPAREN) {
-						parseArgumentList();
+						AList = parseArgumentList();
 					}
 					accept(TokenType.RPAREN);
 					accept(TokenType.SEMICOLON);
+					return new CallStmt(reff, AList,_prevToken.getTokenPosition());
 
 				} else if (_currentToken.getTokenType() == TokenType.EQUALS){
+					Reference reff = parseReference();
 
 					accept(TokenType.EQUALS);
-					parseExpression();
+					Expression exp = parseExpression();
 					accept(TokenType.SEMICOLON);
+					return new AssignStmt(reff, exp, _prevToken.getTokenPosition());
 
 					}
 				else if (_currentToken.getTokenType() == TokenType.ID) {
@@ -271,117 +348,191 @@ public class Parser {
 					accept(TokenType.EQUALS);
 					parseExpression();
 					accept(TokenType.SEMICOLON);
+
+
+
+					ClassType t2 = new ClassType(new Identifier(this._prevToken), this._prevToken.getTokenPosition());
+
+					String varName2 = this._currentToken.getTokenText();
+					VarDecl varDec2 = new VarDecl(t2, varName2, this._currentToken.getTokenPosition());
+
+					accept(TokenType.ID);
+
+					accept(TokenType.EQUALS);
+					Expression e2 = parseExpression();
+					VarDeclStmt vds2 = new VarDeclStmt(varDec2, e2, this._currentToken.getTokenPosition());
+					accept(TokenType.SEMICOLON);
+					return vds2;
+
 				} else if (_currentToken.getTokenType() == TokenType.LBLOCK) {
+					// justin case!
+					IdRef justRef= new IdRef(new Identifier(_prevToken), _prevToken.getTokenPosition());
+					Token hold = _prevToken;
+					ClassType justClass = new ClassType(new Identifier(this._prevToken), this._prevToken.getTokenPosition());
 					accept(TokenType.LBLOCK);
 					if(_currentToken.getTokenType() == TokenType.RBLOCK){
 						//TYPE
+						ArrayType ari = new ArrayType(justClass, _currentToken.getTokenPosition());
+
 						accept(TokenType.RBLOCK);
+
+						VarDecl vard = new VarDecl(ari, _currentToken.getTokenText(), _currentToken.getTokenPosition());
+
 						accept(TokenType.ID);
 						accept(TokenType.EQUALS);
-						parseExpression();
+						Expression ep = parseExpression();
 						accept(TokenType.SEMICOLON);
+						return new VarDeclStmt(vard, ep, _prevToken.getTokenPosition());
 					}
 					else {
-						parseExpression();
+						Expression blockExp = parseExpression();
 						accept(TokenType.RBLOCK);
 						accept(TokenType.EQUALS);
-						parseExpression();
+						Expression signExp = parseExpression();
 						accept(TokenType.SEMICOLON);
+						return new IxAssignStmt(justRef, blockExp, signExp, _prevToken.getTokenPosition());
 					}
+
+
 
 		}
 				else{
 					_errors.reportError(String.format("Invalid statement at %d, %d", _scanner.line, _scanner.column));
+					return null;
 				}
 
 
 
 		}
 
+		return null;
 	}
 
-	private void parseArgumentList(){
+	private ExprList parseArgumentList(){
+		ExprList EList = new ExprList();
 		parseExpression();
 		while(_currentToken.getTokenType() == TokenType.COMMA){
 			accept(TokenType.COMMA);
 			parseExpression();
 		}
+		return EList;
 	}
 
-	private void parseReference(){
+	private Reference parseReference(){
 		if (_currentToken.getTokenType() == TokenType.ID){
 			accept(TokenType.ID);
+			if (_currentToken.getTokenType() != TokenType.PERIOD){
+				IdRef idRef = new IdRef(new Identifier(_prevToken), _prevToken.getTokenPosition());
+				return idRef;
+			}
 		}
 		else if (_currentToken.getTokenType() == TokenType.THIS) {
 			accept(TokenType.THIS);
+			if (_currentToken.getTokenType() != TokenType.PERIOD){
+				ThisRef tRef = new ThisRef(_prevToken.getTokenPosition());
+				return tRef;
+			}
 		}
+		Reference old = null;
+		if(_prevToken.getTokenType() == TokenType.ID){
+			old  = new IdRef(new Identifier(_prevToken), _prevToken.getTokenPosition());
+		}
+		else{
+			old = new ThisRef(_prevToken.getTokenPosition());
+		}
+		QualRef qually = null;
 		while(_currentToken.getTokenType() == TokenType.PERIOD){
 			accept(TokenType.PERIOD);
+			qually = new QualRef(old, new Identifier(_currentToken), _currentToken.getTokenPosition());
 			accept(TokenType.ID);
+			old = qually;
 		}
+		return qually;
 	}
-	private void parseExpression(){
+	private Expression parseExpression(){
+		Expression retting = null;
 		switch (_currentToken.getTokenType()){
 			case INTLITERAL:
 				accept(TokenType.INTLITERAL);
+				retting = new LiteralExpr(new IntLiteral(_prevToken), _prevToken.getTokenPosition());
 				break;
 			case TRUE:
 				accept(TokenType.TRUE);
+				retting = new LiteralExpr(new BooleanLiteral(_prevToken), _prevToken.getTokenPosition());
 				break;
 			case FALSE:
 				accept(TokenType.FALSE);
+				retting = new LiteralExpr(new BooleanLiteral(_prevToken), _prevToken.getTokenPosition());
 				break;
 			case LPAREN:
 				accept(TokenType.LPAREN);
-				parseExpression();
+				Expression inner = parseExpression();
 				accept(TokenType.RPAREN);
+				retting = inner;
 				break;
 			case OPERATOR:
 				if(_currentToken.getTokenText().equals("!") || _currentToken.getTokenText().equals("-")) {
+					Operator unop = new Operator(_currentToken);
 					accept(TokenType.OPERATOR);
-					parseExpression();
-					break;
+
+					Expression ex = parseExpression();
+					retting = new UnaryExpr(unop, ex, _prevToken.getTokenPosition());
 				}
 				else{
 					_errors.reportError("Expected unary operator");
 				}
+				break;
 			case NEW:
+
 				accept(TokenType.NEW);
 				switch (_currentToken.getTokenType()){
 					case ID:
 						accept(TokenType.ID);
 						if (_currentToken.getTokenType() == TokenType.LPAREN){
+							ClassType inter = new ClassType(new Identifier(_prevToken), _prevToken.getTokenPosition());
 							accept(TokenType.LPAREN);
 							accept(TokenType.RPAREN);
+							retting = new NewObjectExpr(inter, _prevToken.getTokenPosition());
 						}
 						else/* (_currentToken.getTokenType() == TokenType.LBLOCK) */{
+							ClassType inter = new ClassType(new Identifier(_prevToken), _prevToken.getTokenPosition());
 							accept(TokenType.LBLOCK);
-							parseExpression();
+							Expression e = parseExpression();
 							accept(TokenType.RBLOCK);
+							retting = new NewArrayExpr(inter, e, _prevToken.getTokenPosition());
 						}
 						break;
-					case INTEGER:
+					default:
+						BaseType inter = new BaseType(TypeKind.INT, _currentToken.getTokenPosition());
 						accept(TokenType.INTEGER);
 						accept(TokenType.LBLOCK);
-						parseExpression();
+						Expression e = parseExpression();
 						accept(TokenType.RBLOCK);
-						break;
+						retting = new NewArrayExpr(inter, e, _prevToken.getTokenPosition());
 				}
 				break;
 			case ID:
 			case THIS:
-				parseReference();
+				Reference reff = parseReference();
+
 				if (_currentToken.getTokenType() == TokenType.LPAREN){
 					accept(TokenType.LPAREN);
+					ExprList aList = new ExprList();
 					if (_currentToken.getTokenType() != TokenType.RPAREN){
-						parseArgumentList();
+						aList = parseArgumentList();
 					}
 					accept(TokenType.RPAREN);
+					retting = new CallExpr(reff, aList, _prevToken.getTokenPosition());
 
 				} else if (_currentToken.getTokenType() == TokenType.LBLOCK) {
 					accept(TokenType.LBLOCK);
-					parseExpression();
+					Expression exP = parseExpression();
 					accept(TokenType.RBLOCK);
+					retting = new IxExpr(reff, exP, _prevToken.getTokenPosition());
+
+				}
+				else {
+					retting = new RefExpr(reff, _prevToken.getTokenPosition());
 				}
 
 				break;
@@ -391,15 +542,20 @@ public class Parser {
 
 		}
 		if (_currentToken.getTokenType() == TokenType.OPERATOR && !_currentToken.getTokenText().equals("!") ){
+			Operator ops = new Operator(_currentToken);
 			accept(TokenType.OPERATOR);
-			parseExpression();
+			BinaryExpr binexp = new BinaryExpr(ops, retting, parseExpression(), _prevToken.getTokenPosition());
+			return binexp;
 		}
+		return retting;
+
 	}
 	
 	// This method will accept the token and retrieve the next token.
 	//  Can be useful if you want to error check and accept all-in-one.
 	private void accept(TokenType expectedType) throws SyntaxError {
 		if( _currentToken.getTokenType() == expectedType ) {
+			_prevToken = _currentToken;
 			_currentToken = _scanner.scan();
 			return;
 		}
