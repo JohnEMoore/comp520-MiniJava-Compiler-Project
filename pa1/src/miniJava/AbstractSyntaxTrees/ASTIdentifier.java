@@ -26,9 +26,10 @@ import miniJava.SyntacticAnalyzer.TokenType;
 public class ASTIdentifier implements Visitor<String,Object> {
 
     public ScopedIdentification SId = new ScopedIdentification();
-    String curClass;
+    Declaration curClass;
     public static boolean showPosition = false;
-    private AST currentTree = null;
+    public AST currentTree = null;
+    public String currentVarDecl;
 
     /**
      * print text representation of AST to stdout
@@ -36,9 +37,10 @@ public class ASTIdentifier implements Visitor<String,Object> {
      * @param ast root node of AST
      */
     public void showTree(AST ast) {
-        System.out.println("======= AST Display =========================");
+        currentTree = ast;
+        //System.out.println("======= AST Display =========================");
         ast.visit(this, "");
-        System.out.println("=============================================");
+        //System.out.println("=============================================");
     }
 
     private void PreloadInit() {
@@ -50,14 +52,18 @@ public class ASTIdentifier implements Visitor<String,Object> {
         PsParamList.add(PsParam);
         MethodDecl PsMethod = new MethodDecl(new FieldDecl(false, false, new BaseType(TypeKind.VOID, new SourcePosition(0, 0)), "println",  new SourcePosition(0, 0)), PsParamList, new StatementList(), defPosn);
         PsMethods.add(PsMethod);
-        FieldDeclList SysFields = new FieldDeclList();
-        SysFields.add(new FieldDecl(false, true, new ClassType(new Identifier(new Token(TokenType.CLASS, "_PrintStream", defPosn)), defPosn),  "out", defPosn));
-        ClassDecl SystemDecl = new ClassDecl("System", SysFields, new MethodDeclList(), defPosn);
         SId.addDeclaration("_PrintStream", new ClassDecl("_PrintStream", PsFields, PsMethods, defPosn));
+
+        FieldDeclList SysFields = new FieldDeclList();
+        Token toke = new Token(TokenType.ID, "_PrintStream", defPosn);
+        FieldDecl fs = new FieldDecl(false, true, new ClassType(new Identifier(toke), defPosn),"out", defPosn);
+        SysFields.add(fs);
+        ClassDecl SystemDecl = new ClassDecl("System", SysFields, new MethodDeclList(), defPosn);
         SId.addDeclaration("System", SystemDecl);
         SId.addDeclaration("String", new ClassDecl("String", new FieldDeclList(), new MethodDeclList(), defPosn));
         SId.openScope();
-        SId.addDeclaration("System._PrintStream", new FieldDecl(false, true, new ClassType(new Identifier(new Token(TokenType.CLASS, "_PrintStream", defPosn)), defPosn),"out", defPosn));
+
+        SId.addDeclaration("System.out",fs );
         SId.addDeclaration("_PrintStream.println", PsMethod);
     }
 
@@ -71,7 +77,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
      * @param text    preformatted node display
      */
     private void show(String prefix, String text) {
-        System.out.println(prefix + text);
+        //System.out.println(prefix + text);
     }
 
     /**
@@ -80,7 +86,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
      * @param node    AST node, will be shown by name
      */
     private void show(String prefix, AST node) {
-        System.out.println(prefix + node.toString());
+       // System.out.println(prefix + node.toString());
     }
 
     /**
@@ -107,15 +113,17 @@ public class ASTIdentifier implements Visitor<String,Object> {
     //
     ///////////////////////////////////////////////////////////////////////////////
 
-    public Object visitPackage(Package prog, String arg){
+    public Object visitPackage(Package prog, String arg) throws Error {
+        SId.curtree = currentTree;
         show(arg, prog);
         ClassDeclList cl = prog.classDeclList;
         show(arg,"  ClassDeclList [" + cl.size() + "]");
         String pfx = arg + "  . ";
         for (ClassDecl c: prog.classDeclList){
             visitFirstClassDecl(c);
-            PreloadInit();
+
         }
+        PreloadInit();
         for (ClassDecl c: prog.classDeclList){
             c.visit(this, pfx);
         }
@@ -137,7 +145,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
     public Object visitClassDecl(ClassDecl clas, String arg){
         show(arg, clas);
         show(indent(arg), quote(clas.name) + " classname");
-        curClass = clas.name;
+        curClass = clas;
         show(arg,"  FieldDeclList [" + clas.fieldDeclList.size() + "]");
         String pfx = arg + "  . ";
         SId.openScope();  // scope 1
@@ -158,7 +166,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
                 + (f.isStatic ? " static) " :") ") + f.toString());
         f.type.visit(this, indent(arg));
         show(indent(arg), quote(f.name) + " fieldname");
-        SId.addDeclaration(f.name + curClass, f);
+        SId.addDeclaration(curClass + "." + f.name, f);
         return null;
     }
 
@@ -185,7 +193,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
     }
 
     public Object visitMethodDeclFirst(MethodDecl m){
-        SId.addDeclaration(m.name +curClass, m); // me
+        SId.addDeclaration(curClass + "." + m.name, m); // me
         StatementList sl = m.statementList;
         return null;
     }
@@ -193,6 +201,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public Object visitParameterDecl(ParameterDecl pd, String arg){
         show(arg, pd);
+        SId.addDeclaration(pd.name, pd);
         pd.type.visit(this, indent(arg));
         show(indent(arg), quote(pd.name) + "parametername ");
         return null;
@@ -253,9 +262,11 @@ public class ASTIdentifier implements Visitor<String,Object> {
     public Object visitVardeclStmt(VarDeclStmt stmt, String arg){
 
         show(arg, stmt);
+        currentVarDecl = stmt.varDecl.name;
         stmt.varDecl.visit(this, indent(arg));
         stmt.initExp.visit(this, indent(arg));
         // put type of var into the indentifier
+        currentVarDecl = null;
         return null;
     }
 
@@ -277,7 +288,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public Object visitCallStmt(CallStmt stmt, String arg){
         show(arg,stmt);
-        Reference ref = ((Reference) stmt.methodRef.visit(this, indent(arg)));
+        stmt.methodRef.visit(this, indent(arg));
 
         ExprList al = stmt.argList;
         show(arg,"  ExprList [" + al.size() + "]");
@@ -384,21 +395,24 @@ public class ASTIdentifier implements Visitor<String,Object> {
     //
     ///////////////////////////////////////////////////////////////////////////////
 
-    public Reference visitThisRef(ThisRef ref, String arg) {
+    public Declaration visitThisRef(ThisRef ref, String arg) {
         show(arg,ref);
-        return ref;
+        return curClass;
     }
 
-    public Reference visitIdRef(IdRef ref, String arg) {
+    public Declaration visitIdRef(IdRef ref, String arg) {
         show(arg,ref);
-        ref.id.visit(this, indent(arg));
-        return ref;
+        Declaration decl = visitIdentifier(ref.id, indent(arg));
+        if (decl.name.equals(currentVarDecl)){
+            throw new IdentificationError(currentTree, "Cant use var in own decl statement");
+        }
+        return decl;
     }
 
 
-    public Reference visitQRef(QualRef qr, String arg) {
-        qr.id.visit(this, indent(arg));
-        Reference ref = null;
+    public Declaration visitQRef(QualRef qr, String arg) {
+        Declaration ref = null;
+        Declaration rhs;
         show(arg, qr);
         if (qr.ref.getClass() == IdRef.class){
             ref = visitIdRef(((IdRef) qr.ref), indent(arg));
@@ -424,7 +438,9 @@ public class ASTIdentifier implements Visitor<String,Object> {
            if (((QualRef) qr.ref).id.decl.getClass() == MethodDecl.class){
                throw new IdentificationError(this.currentTree, "Using a method as a reference");
            }
+            //ref = qr.id.decl;
 
+            /*
            if(ref.getClass() == ThisRef.class){
                if(qr.id.decl.getClass() == MethodDecl.class){
 
@@ -433,10 +449,16 @@ public class ASTIdentifier implements Visitor<String,Object> {
            else if(ref.getClass() == ThisRef.class){
 
             }
+
+             */
         }
-        qr.id.visit(this, indent(arg));
+
+        Declaration temp = curClass;
+        curClass = ref;
+        rhs =  visitIdentifier(qr.id, indent(arg));// think this could be ref
+        curClass = temp;
         //qr.ref.visit(this, indent(arg));
-        return ref;
+        return rhs;
     }
 
 
@@ -446,16 +468,16 @@ public class ASTIdentifier implements Visitor<String,Object> {
     //
     ///////////////////////////////////////////////////////////////////////////////
 
-    public Object visitIdentifier(Identifier id, String arg){
-        Declaration decl = SId.findDeclaration(id, "");
+    public Declaration visitIdentifier(Identifier id, String arg){
+        Declaration decl = SId.findDeclaration(id, curClass);
         if (decl == null){
-           throw new IdentificationError(currentTree, "Undeclared value");
+           throw new IdentificationError(currentTree, "Undeclared value " + id.spelling);
         }
         else{
             id.decl = decl;
         }
         show(arg, quote(id.spelling) + " " + id.toString());
-        return null;
+        return decl;
     }
 
     public Object visitOperator(Operator op, String arg){
@@ -479,19 +501,6 @@ public class ASTIdentifier implements Visitor<String,Object> {
     }
 }
 
-class IdentificationError extends Error {
-    private static final long serialVersionUID = -441346906191470192L;
-    private String _errMsg;
 
-    public IdentificationError(AST ast, String errMsg) {
-        super();
-        this._errMsg = ast.posn == null
-                ? "*** " + errMsg
-                : "*** " + ast.posn.toString() + ": " + errMsg;
-    }
 
-    @Override
-    public String toString() {
-        return _errMsg;
-    }
-}
+

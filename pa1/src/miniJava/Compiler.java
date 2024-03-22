@@ -41,8 +41,17 @@ public class Compiler {
 						_errors.outputErrors();
 					}
 					else{
-						disp.showTree(ASTER);
+						try {
+							disp.showTree(ASTER);
+							System.out.println("Success");
+						}
+						catch (Error e){
+							_errors.reportError(e.toString());
+							System.out.println("Error");
+							_errors.outputErrors();
+						}
 						System.out.println(disp.SId);
+
 					}
 				} catch (Throwable e) {
 					_errors.reportError("Exception at " + myScanner.getPos().toString());
