@@ -495,7 +495,7 @@ public class Parser {
 							while (((BinaryExpr) ex).left instanceof BinaryExpr){
 								ex = ((BinaryExpr) ex).left;
 							}
-							((BinaryExpr) ex).left = new UnaryExpr(unop, ((BinaryExpr) ex).left, _prevToken.getTokenPosition());
+							//((BinaryExpr) ex).left = new UnaryExpr(unop, ((BinaryExpr) ex).left, _prevToken.getTokenPosition());
 						}
 						((BinaryExpr) ex).left = new UnaryExpr(unop, ((BinaryExpr) ex).left, _prevToken.getTokenPosition());
 					}
