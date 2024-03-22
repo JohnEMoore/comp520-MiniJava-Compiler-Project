@@ -473,6 +473,10 @@ public class Parser {
 				accept(TokenType.FALSE);
 				retting = new LiteralExpr(new BooleanLiteral(_prevToken), _prevToken.getTokenPosition());
 				break;
+			case NULL:
+				accept(TokenType.NULL);
+				retting = new LiteralExpr(new NullLiteral(_prevToken), _prevToken.getTokenPosition());
+				break;
 			case LPAREN:
 				accept(TokenType.LPAREN);
 				Expression inner = parseExpression();

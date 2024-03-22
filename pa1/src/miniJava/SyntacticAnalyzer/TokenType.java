@@ -31,6 +31,7 @@ public enum TokenType {
     LCURLY,
     LPAREN,
     NEW,
+    NULL,
     OPERATOR,
     PERIOD,
     RBLOCK,

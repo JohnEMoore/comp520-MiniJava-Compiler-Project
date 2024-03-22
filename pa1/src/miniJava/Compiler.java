@@ -30,7 +30,7 @@ public class Compiler {
 				Parser myParser = new Parser(myScanner, _errors);
 				// TODO: Call the parser's parse function
 				try {
-					ASTDisplay disp = new ASTDisplay();
+					ASTIdentifier disp = new ASTIdentifier();
 					Package ASTER = myParser.parse();
 					// TODO: Check if any errors exist, if so, println("Error")
 					//  then output the errors
@@ -42,6 +42,7 @@ public class Compiler {
 					}
 					else{
 						disp.showTree(ASTER);
+						System.out.println(disp.SId);
 					}
 				} catch (Throwable e) {
 					_errors.reportError("Exception at " + myScanner.getPos().toString());

@@ -135,6 +135,9 @@ public class Scanner {
 				case "new":
 					tokType = TokenType.NEW;
 					break;
+				case "null":
+					tokType = TokenType.NULL;
+					break;
 				case "this":
 					tokType = TokenType.THIS;
 					break;

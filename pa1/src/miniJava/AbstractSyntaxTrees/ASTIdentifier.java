@@ -5,35 +5,66 @@
  */
 package miniJava.AbstractSyntaxTrees;
 
+import miniJava.SyntacticAnalyzer.ScopedIdentification;
+import miniJava.SyntacticAnalyzer.SourcePosition;
+import miniJava.SyntacticAnalyzer.Token;
+import miniJava.SyntacticAnalyzer.TokenType;
+
 /*
- * Display AST in text form, one node per line, using indentation to show 
+ * Display AST in text form, one node per line, using indentation to show
  * subordinate nodes below a parent node.
- *   
- * Performs an in-order traversal of AST, visiting an AST node of type XXX 
- * with a method of the form  
- *   
+ *
+ * Performs an in-order traversal of AST, visiting an AST node of type XXX
+ * with a method of the form
+ *
  *       public Object visitXXX( XXX astnode, String arg)
- *       
+ *
  *   where arg is a prefix string (indentation) to precede display of ast node
  *   and a null Object is returned as the result.
  *   The display is produced by printing a line of output at each node visited.
  */
-public class ASTDisplay implements Visitor<String,Object> {
-	
-	public static boolean showPosition = false;
-    
+public class ASTIdentifier implements Visitor<String,Object> {
+
+    public ScopedIdentification SId = new ScopedIdentification();
+    String curClass;
+    public static boolean showPosition = false;
+    private AST currentTree = null;
+
     /**
      * print text representation of AST to stdout
-     * @param ast root node of AST 
+     *
+     * @param ast root node of AST
      */
-    public void showTree(AST ast){
+    public void showTree(AST ast) {
         System.out.println("======= AST Display =========================");
         ast.visit(this, "");
         System.out.println("=============================================");
-    }   
-    
+    }
+
+    private void PreloadInit() {
+        SourcePosition defPosn = new SourcePosition(0, 0);
+        FieldDeclList PsFields = new FieldDeclList();
+        MethodDeclList PsMethods = new MethodDeclList();
+        ParameterDecl PsParam = new ParameterDecl(new BaseType(TypeKind.INT, defPosn), "x", defPosn);
+        ParameterDeclList PsParamList = new ParameterDeclList();
+        PsParamList.add(PsParam);
+        MethodDecl PsMethod = new MethodDecl(new FieldDecl(false, false, new BaseType(TypeKind.VOID, new SourcePosition(0, 0)), "println",  new SourcePosition(0, 0)), PsParamList, new StatementList(), defPosn);
+        PsMethods.add(PsMethod);
+        FieldDeclList SysFields = new FieldDeclList();
+        SysFields.add(new FieldDecl(false, true, new ClassType(new Identifier(new Token(TokenType.CLASS, "_PrintStream", defPosn)), defPosn),  "out", defPosn));
+        ClassDecl SystemDecl = new ClassDecl("System", SysFields, new MethodDeclList(), defPosn);
+        SId.addDeclaration("_PrintStream", new ClassDecl("_PrintStream", PsFields, PsMethods, defPosn));
+        SId.addDeclaration("System", SystemDecl);
+        SId.addDeclaration("String", new ClassDecl("String", new FieldDeclList(), new MethodDeclList(), defPosn));
+        SId.openScope();
+        SId.addDeclaration("System._PrintStream", new FieldDecl(false, true, new ClassType(new Identifier(new Token(TokenType.CLASS, "_PrintStream", defPosn)), defPosn),"out", defPosn));
+        SId.addDeclaration("_PrintStream.println", PsMethod);
+    }
+
+
+
     // methods to format output
-    
+
     /**
      * display arbitrary text for a node
      * @param prefix  indent text to indicate depth in AST
@@ -42,87 +73,105 @@ public class ASTDisplay implements Visitor<String,Object> {
     private void show(String prefix, String text) {
         System.out.println(prefix + text);
     }
-    
+
     /**
      * display AST node by name
      * @param prefix  spaced indent to indicate depth in AST
      * @param node    AST node, will be shown by name
      */
     private void show(String prefix, AST node) {
-    	System.out.println(prefix + node.toString());
+        System.out.println(prefix + node.toString());
     }
-    
+
     /**
      * quote a string
      * @param text    string to quote
      */
     private String quote(String text) {
-    	return ("\"" + text + "\"");
+        return ("\"" + text + "\"");
     }
-    
+
     /**
      * increase depth in AST
      * @param prefix  current spacing to indicate depth in AST
-     * @return  new spacing 
+     * @return  new spacing
      */
     private String indent(String prefix) {
         return prefix + "  ";
     }
-    
-    
-	///////////////////////////////////////////////////////////////////////////////
-	//
-	// PACKAGE
-	//
-	/////////////////////////////////////////////////////////////////////////////// 
+
+
+    ///////////////////////////////////////////////////////////////////////////////
+    //
+    // PACKAGE
+    //
+    ///////////////////////////////////////////////////////////////////////////////
 
     public Object visitPackage(Package prog, String arg){
         show(arg, prog);
         ClassDeclList cl = prog.classDeclList;
         show(arg,"  ClassDeclList [" + cl.size() + "]");
-        String pfx = arg + "  . "; 
+        String pfx = arg + "  . ";
+        for (ClassDecl c: prog.classDeclList){
+            visitFirstClassDecl(c);
+            PreloadInit();
+        }
         for (ClassDecl c: prog.classDeclList){
             c.visit(this, pfx);
         }
+
         return null;
     }
-    
-    
-	///////////////////////////////////////////////////////////////////////////////
-	//
-	// DECLARATIONS
-	//
-	///////////////////////////////////////////////////////////////////////////////
-    
+
+
+    ///////////////////////////////////////////////////////////////////////////////
+    //
+    // DECLARATIONS
+    //
+    ///////////////////////////////////////////////////////////////////////////////
+
+    public Object visitFirstClassDecl(ClassDecl clas){
+        SId.addDeclaration(clas.name, clas);
+        return null;
+    }
     public Object visitClassDecl(ClassDecl clas, String arg){
         show(arg, clas);
         show(indent(arg), quote(clas.name) + " classname");
+        curClass = clas.name;
         show(arg,"  FieldDeclList [" + clas.fieldDeclList.size() + "]");
-        String pfx = arg + "  . "; 
+        String pfx = arg + "  . ";
+        SId.openScope();  // scope 1
         for (FieldDecl f: clas.fieldDeclList)
-        	f.visit(this, pfx);
+            f.visit(this, pfx);
         show(arg,"  MethodDeclList [" + clas.methodDeclList.size() + "]");
         for (MethodDecl m: clas.methodDeclList)
-        	m.visit(this, pfx);
+            visitMethodDeclFirst(m);
+        for (MethodDecl m: clas.methodDeclList)
+            m.visit(this, pfx);
+        SId.closeScope();
+
         return null;
     }
-    
+
     public Object visitFieldDecl(FieldDecl f, String arg){
-       	show(arg, "(" + (f.isPrivate ? "private": "public") 
-    			+ (f.isStatic ? " static) " :") ") + f.toString());
-    	f.type.visit(this, indent(arg));
-    	show(indent(arg), quote(f.name) + " fieldname");
+        show(arg, "(" + (f.isPrivate ? "private": "public")
+                + (f.isStatic ? " static) " :") ") + f.toString());
+        f.type.visit(this, indent(arg));
+        show(indent(arg), quote(f.name) + " fieldname");
+        SId.addDeclaration(f.name + curClass, f);
         return null;
     }
-    
+
     public Object visitMethodDecl(MethodDecl m, String arg){
-       	show(arg, "(" + (m.isPrivate ? "private": "public") 
-    			+ (m.isStatic ? " static) " :") ") + m.toString());
-    	m.type.visit(this, indent(arg));
-    	show(indent(arg), quote(m.name) + " methodname");
+        SId.openScope(); // move to scope 2
+        show(arg, "(" + (m.isPrivate ? "private": "public")
+                + (m.isStatic ? " static) " :") ") + m.toString());
+        m.type.visit(this, indent(arg));
+        show(indent(arg), quote(m.name) + " methodname");
         ParameterDeclList pdl = m.parameterDeclList;
         show(arg, "  ParameterDeclList [" + pdl.size() + "]");
         String pfx = ((String) arg) + "  . ";
+
         for (ParameterDecl pd: pdl) {
             pd.visit(this, pfx);
         }
@@ -131,79 +180,91 @@ public class ASTDisplay implements Visitor<String,Object> {
         for (Statement s: sl) {
             s.visit(this, pfx);
         }
+        SId.closeScope();
         return null;
     }
-    
+
+    public Object visitMethodDeclFirst(MethodDecl m){
+        SId.addDeclaration(m.name +curClass, m); // me
+        StatementList sl = m.statementList;
+        return null;
+    }
+
+
     public Object visitParameterDecl(ParameterDecl pd, String arg){
         show(arg, pd);
         pd.type.visit(this, indent(arg));
         show(indent(arg), quote(pd.name) + "parametername ");
         return null;
-    } 
-    
+    }
+
     public Object visitVarDecl(VarDecl vd, String arg){
+        SId.addDeclaration(vd.name, vd);
         show(arg, vd);
         vd.type.visit(this, indent(arg));
         show(indent(arg), quote(vd.name) + " varname");
         return null;
     }
- 
-	
-	///////////////////////////////////////////////////////////////////////////////
-	//
-	// TYPES
-	//
-	///////////////////////////////////////////////////////////////////////////////
-    
+
+
+    ///////////////////////////////////////////////////////////////////////////////
+    //
+    // TYPES
+    //
+    ///////////////////////////////////////////////////////////////////////////////
+
     public Object visitBaseType(BaseType type, String arg){
         show(arg, type.typeKind + " " + type.toString());
         return null;
     }
-    
+
     public Object visitClassType(ClassType ct, String arg){
         show(arg, ct);
         ct.className.visit(this, indent(arg));
         return null;
     }
-    
+
     public Object visitArrayType(ArrayType type, String arg){
         show(arg, type);
         type.eltType.visit(this, indent(arg));
         return null;
     }
-    
-	
-	///////////////////////////////////////////////////////////////////////////////
-	//
-	// STATEMENTS
-	//
-	///////////////////////////////////////////////////////////////////////////////
+
+
+    ///////////////////////////////////////////////////////////////////////////////
+    //
+    // STATEMENTS
+    //
+    ///////////////////////////////////////////////////////////////////////////////
 
     public Object visitBlockStmt(BlockStmt stmt, String arg){
+        SId.openScope();
         show(arg, stmt);
         StatementList sl = stmt.sl;
         show(arg,"  StatementList [" + sl.size() + "]");
         String pfx = arg + "  . ";
         for (Statement s: sl) {
-        	s.visit(this, pfx);
+            s.visit(this, pfx);
         }
+        SId.closeScope();
         return null;
     }
-    
+
     public Object visitVardeclStmt(VarDeclStmt stmt, String arg){
+
         show(arg, stmt);
-        stmt.varDecl.visit(this, indent(arg));	
+        stmt.varDecl.visit(this, indent(arg));
         stmt.initExp.visit(this, indent(arg));
         return null;
     }
-    
+
     public Object visitAssignStmt(AssignStmt stmt, String arg){
         show(arg,stmt);
         stmt.ref.visit(this, indent(arg));
         stmt.val.visit(this, indent(arg));
         return null;
     }
-    
+
     public Object visitIxAssignStmt(IxAssignStmt stmt, String arg){
         show(arg,stmt);
         stmt.ref.visit(this, indent(arg));
@@ -211,7 +272,7 @@ public class ASTDisplay implements Visitor<String,Object> {
         stmt.exp.visit(this, indent(arg));
         return null;
     }
-        
+
     public Object visitCallStmt(CallStmt stmt, String arg){
         show(arg,stmt);
         stmt.methodRef.visit(this, indent(arg));
@@ -223,14 +284,14 @@ public class ASTDisplay implements Visitor<String,Object> {
         }
         return null;
     }
-    
+
     public Object visitReturnStmt(ReturnStmt stmt, String arg){
         show(arg,stmt);
-         if (stmt.returnExpr != null)
+        if (stmt.returnExpr != null)
             stmt.returnExpr.visit(this, indent(arg));
         return null;
     }
-    
+
     public Object visitIfStmt(IfStmt stmt, String arg){
         show(arg,stmt);
         stmt.cond.visit(this, indent(arg));
@@ -239,20 +300,20 @@ public class ASTDisplay implements Visitor<String,Object> {
             stmt.elseStmt.visit(this, indent(arg));
         return null;
     }
-    
+
     public Object visitWhileStmt(WhileStmt stmt, String arg){
         show(arg, stmt);
         stmt.cond.visit(this, indent(arg));
         stmt.body.visit(this, indent(arg));
         return null;
     }
-    
 
-	///////////////////////////////////////////////////////////////////////////////
-	//
-	// EXPRESSIONS
-	//
-	///////////////////////////////////////////////////////////////////////////////
+
+    ///////////////////////////////////////////////////////////////////////////////
+    //
+    // EXPRESSIONS
+    //
+    ///////////////////////////////////////////////////////////////////////////////
 
     public Object visitUnaryExpr(UnaryExpr expr, String arg){
         show(arg, expr);
@@ -260,7 +321,7 @@ public class ASTDisplay implements Visitor<String,Object> {
         expr.expr.visit(this, indent(indent(arg)));
         return null;
     }
-    
+
     public Object visitBinaryExpr(BinaryExpr expr, String arg){
         show(arg, expr);
         expr.operator.visit(this, indent(arg));
@@ -268,20 +329,20 @@ public class ASTDisplay implements Visitor<String,Object> {
         expr.right.visit(this, indent(indent(arg)));
         return null;
     }
-    
+
     public Object visitRefExpr(RefExpr expr, String arg){
         show(arg, expr);
         expr.ref.visit(this, indent(arg));
         return null;
     }
-    
+
     public Object visitIxExpr(IxExpr ie, String arg){
         show(arg, ie);
         ie.ref.visit(this, indent(arg));
         ie.ixExpr.visit(this, indent(arg));
         return null;
     }
-    
+
     public Object visitCallExpr(CallExpr expr, String arg){
         show(arg, expr);
         expr.functionRef.visit(this, indent(arg));
@@ -293,73 +354,91 @@ public class ASTDisplay implements Visitor<String,Object> {
         }
         return null;
     }
-    
+
     public Object visitLiteralExpr(LiteralExpr expr, String arg){
         show(arg, expr);
         expr.lit.visit(this, indent(arg));
         return null;
     }
- 
+
     public Object visitNewArrayExpr(NewArrayExpr expr, String arg){
         show(arg, expr);
         expr.eltType.visit(this, indent(arg));
         expr.sizeExpr.visit(this, indent(arg));
         return null;
     }
-    
+
     public Object visitNewObjectExpr(NewObjectExpr expr, String arg){
         show(arg, expr);
         expr.classtype.visit(this, indent(arg));
         return null;
     }
-    
 
-	///////////////////////////////////////////////////////////////////////////////
-	//
-	// REFERENCES
-	//
-	///////////////////////////////////////////////////////////////////////////////
-	
-    public Object visitThisRef(ThisRef ref, String arg) {
-    	show(arg,ref);
-    	return null;
+
+    ///////////////////////////////////////////////////////////////////////////////
+    //
+    // REFERENCES
+    //
+    ///////////////////////////////////////////////////////////////////////////////
+
+    public Reference visitThisRef(ThisRef ref, String arg) {
+        show(arg,ref);
+        return ref;
     }
-    
-    public Object visitIdRef(IdRef ref, String arg) {
-    	show(arg,ref);
-    	ref.id.visit(this, indent(arg));
-    	return null;
+
+    public Reference visitIdRef(IdRef ref, String arg) {
+        show(arg,ref);
+        ref.id.visit(this, indent(arg));
+        return ref;
     }
-        
-    public Object visitQRef(QualRef qr, String arg) {
-    	show(arg, qr);
-    	qr.id.visit(this, indent(arg));
-    	qr.ref.visit(this, indent(arg));
-	    return null;
+
+    public Reference visitRefThis(ThisRef ref, String arg) {
+        show(arg,ref);
+        return ref;
     }
-      
-    
-	///////////////////////////////////////////////////////////////////////////////
-	//
-	// TERMINALS
-	//
-	///////////////////////////////////////////////////////////////////////////////
-    
+
+    public Reference visitRef(Reference ref, String arg) {
+        show(arg,ref);
+        ref.id.visit(this, indent(arg));
+        return ref;
+    }
+
+    public Reference visitQRef(QualRef qr, String arg) {
+        Reference ref = null;
+        show(arg, qr);
+        if (qr.ref.getClass() == IdRef.class){
+            ref = visitRefID(qr.ref, indent(arg));
+        }
+        ref = qr.id.visit(this, indent(arg));
+        qr.ref.visit(this, indent(arg));
+        return null;
+    }
+
+
+    ///////////////////////////////////////////////////////////////////////////////
+    //
+    // TERMINALS
+    //
+    ///////////////////////////////////////////////////////////////////////////////
+
     public Object visitIdentifier(Identifier id, String arg){
+        if (SId.findDeclaration(id, "") == null){
+           throw new IdentificationError(currentTree, "Undeclared value");
+        };
         show(arg, quote(id.spelling) + " " + id.toString());
         return null;
     }
-    
+
     public Object visitOperator(Operator op, String arg){
         show(arg, quote(op.spelling) + " " + op.toString());
         return null;
     }
-    
+
     public Object visitIntLiteral(IntLiteral num, String arg){
         show(arg, quote(num.spelling) + " " + num.toString());
         return null;
     }
-    
+
     public Object visitBooleanLiteral(BooleanLiteral bool, String arg){
         show(arg, quote(bool.spelling) + " " + bool.toString());
         return null;
@@ -368,5 +447,22 @@ public class ASTDisplay implements Visitor<String,Object> {
     public Object visitNullLiteral (NullLiteral n1, String arg){
         show(arg, quote(n1.spelling) + " " + n1.toString());
         return null;
+    }
+}
+
+class IdentificationError extends Error {
+    private static final long serialVersionUID = -441346906191470192L;
+    private String _errMsg;
+
+    public IdentificationError(AST ast, String errMsg) {
+        super();
+        this._errMsg = ast.posn == null
+                ? "*** " + errMsg
+                : "*** " + ast.posn.toString() + ": " + errMsg;
+    }
+
+    @Override
+    public String toString() {
+        return _errMsg;
     }
 }
