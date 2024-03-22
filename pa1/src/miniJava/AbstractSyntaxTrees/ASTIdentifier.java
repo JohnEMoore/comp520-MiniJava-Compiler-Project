@@ -255,6 +255,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
         show(arg, stmt);
         stmt.varDecl.visit(this, indent(arg));
         stmt.initExp.visit(this, indent(arg));
+        // put type of var into the indentifier
         return null;
     }
 
@@ -262,6 +263,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
         show(arg,stmt);
         stmt.ref.visit(this, indent(arg));
         stmt.val.visit(this, indent(arg));
+        // the type check goes here
         return null;
     }
 
@@ -275,7 +277,8 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public Object visitCallStmt(CallStmt stmt, String arg){
         show(arg,stmt);
-        stmt.methodRef.visit(this, indent(arg));
+        Reference ref = ((Reference) stmt.methodRef.visit(this, indent(arg)));
+
         ExprList al = stmt.argList;
         show(arg,"  ExprList [" + al.size() + "]");
         String pfx = arg + "  . ";
@@ -392,26 +395,48 @@ public class ASTIdentifier implements Visitor<String,Object> {
         return ref;
     }
 
-    public Reference visitRefThis(ThisRef ref, String arg) {
-        show(arg,ref);
-        return ref;
-    }
-
-    public Reference visitRef(Reference ref, String arg) {
-        show(arg,ref);
-        ref.id.visit(this, indent(arg));
-        return ref;
-    }
 
     public Reference visitQRef(QualRef qr, String arg) {
+        qr.id.visit(this, indent(arg));
         Reference ref = null;
         show(arg, qr);
         if (qr.ref.getClass() == IdRef.class){
-            ref = visitRefID(qr.ref, indent(arg));
+            ref = visitIdRef(((IdRef) qr.ref), indent(arg));
+            if(((IdRef) qr.ref).id.kind == TokenType.CLASS ){ //i think this is proper but maybe check decl
+                if(qr.id.decl.getClass()  == MethodDecl.class){
+                    if (!((MethodDecl) qr.id.decl).isStatic){
+                        throw new IdentificationError(this.currentTree, "Accessing a nonstatic member from a class");
+                    }
+                }
+                if(qr.id.decl.getClass()  == FieldDecl.class){
+                    if (!((FieldDecl) qr.id.decl).isStatic){
+                        throw new IdentificationError(this.currentTree, "Accessing a nonstatic member from a class");
+                    }
+                }
+            }
+
         }
-        ref = qr.id.visit(this, indent(arg));
-        qr.ref.visit(this, indent(arg));
-        return null;
+        else if(qr.ref.getClass() == ThisRef.class){
+            ref = visitThisRef(((ThisRef) qr.ref), indent(arg));
+        }
+        else{ //ref is a qual ref
+           ref = visitQRef(((QualRef) qr.ref), indent(arg));
+           if (((QualRef) qr.ref).id.decl.getClass() == MethodDecl.class){
+               throw new IdentificationError(this.currentTree, "Using a method as a reference");
+           }
+
+           if(ref.getClass() == ThisRef.class){
+               if(qr.id.decl.getClass() == MethodDecl.class){
+
+               }
+           }
+           else if(ref.getClass() == ThisRef.class){
+
+            }
+        }
+        qr.id.visit(this, indent(arg));
+        //qr.ref.visit(this, indent(arg));
+        return ref;
     }
 
 
@@ -422,9 +447,13 @@ public class ASTIdentifier implements Visitor<String,Object> {
     ///////////////////////////////////////////////////////////////////////////////
 
     public Object visitIdentifier(Identifier id, String arg){
-        if (SId.findDeclaration(id, "") == null){
+        Declaration decl = SId.findDeclaration(id, "");
+        if (decl == null){
            throw new IdentificationError(currentTree, "Undeclared value");
-        };
+        }
+        else{
+            id.decl = decl;
+        }
         show(arg, quote(id.spelling) + " " + id.toString());
         return null;
     }
