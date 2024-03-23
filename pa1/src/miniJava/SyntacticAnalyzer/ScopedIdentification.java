@@ -41,9 +41,14 @@ public class ScopedIdentification {
                 if (i == 1){
 
                     if(context.getClass() == FieldDecl.class){
-                        System.out.println(((ClassType)((FieldDecl) context).type).className.spelling + "." + id.spelling);
+                        //System.out.println(((ClassType)((FieldDecl) context).type).className.spelling + "." + id.spelling);
                         if (siStack.elementAt(i).get( ((ClassType)((FieldDecl) context).type).className.spelling + "." + id.spelling) != null) {
                             ret = siStack.elementAt(i).get( ((ClassType)((FieldDecl) context).type).className.spelling + "." + id.spelling);
+                        }
+                    }
+                    else if(context.getClass() == VarDecl.class){
+                        if (siStack.elementAt(i).get( ((ClassType)((VarDecl) context).type).className.spelling + "." + id.spelling) != null) {
+                            ret = siStack.elementAt(i).get( ((ClassType)((VarDecl) context).type).className.spelling + "." + id.spelling);
                         }
                     }
                     else{

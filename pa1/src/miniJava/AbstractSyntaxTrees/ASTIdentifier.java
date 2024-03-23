@@ -125,6 +125,17 @@ public class ASTIdentifier implements Visitor<String,Object> {
         }
         PreloadInit();
         for (ClassDecl c: prog.classDeclList){
+            visitmembersFirst(c, arg);
+
+        }
+        for (ClassDecl c: prog.classDeclList) {
+            curClass = c;
+            for (MethodDecl m : c.methodDeclList) {
+                visitMethodDeclFirst(m);
+
+            }
+        }
+        for (ClassDecl c: prog.classDeclList){
             c.visit(this, pfx);
         }
 
@@ -148,17 +159,20 @@ public class ASTIdentifier implements Visitor<String,Object> {
         curClass = clas;
         show(arg,"  FieldDeclList [" + clas.fieldDeclList.size() + "]");
         String pfx = arg + "  . ";
-        SId.openScope();  // scope 1
-        for (FieldDecl f: clas.fieldDeclList)
-            f.visit(this, pfx);
         show(arg,"  MethodDeclList [" + clas.methodDeclList.size() + "]");
-        for (MethodDecl m: clas.methodDeclList)
-            visitMethodDeclFirst(m);
-        for (MethodDecl m: clas.methodDeclList)
+
+        for (MethodDecl m: clas.methodDeclList) {
             m.visit(this, pfx);
-        SId.closeScope();
+        }
 
         return null;
+    }
+
+    public Object visitmembersFirst(ClassDecl clas, String pfx){
+        curClass = clas;
+        for (FieldDecl f: clas.fieldDeclList)
+            visitFieldDecl(f, pfx);
+        return  null;
     }
 
     public Object visitFieldDecl(FieldDecl f, String arg){
@@ -166,7 +180,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
                 + (f.isStatic ? " static) " :") ") + f.toString());
         f.type.visit(this, indent(arg));
         show(indent(arg), quote(f.name) + " fieldname");
-        SId.addDeclaration(curClass + "." + f.name, f);
+        SId.addDeclaration(curClass.name + "." + f.name, f);
         return null;
     }
 
@@ -193,8 +207,8 @@ public class ASTIdentifier implements Visitor<String,Object> {
     }
 
     public Object visitMethodDeclFirst(MethodDecl m){
-        SId.addDeclaration(curClass + "." + m.name, m); // me
-        StatementList sl = m.statementList;
+        SId.addDeclaration(curClass.name + "." + m.name, m); // me
+
         return null;
     }
 
@@ -262,9 +276,13 @@ public class ASTIdentifier implements Visitor<String,Object> {
     public Object visitVardeclStmt(VarDeclStmt stmt, String arg){
 
         show(arg, stmt);
-        currentVarDecl = stmt.varDecl.name;
+
         stmt.varDecl.visit(this, indent(arg));
+        currentVarDecl = stmt.varDecl.name;
+
         stmt.initExp.visit(this, indent(arg));
+        currentVarDecl = "";
+
         // put type of var into the indentifier
         currentVarDecl = null;
         return null;
@@ -406,6 +424,10 @@ public class ASTIdentifier implements Visitor<String,Object> {
         if (decl.name.equals(currentVarDecl)){
             throw new IdentificationError(currentTree, "Cant use var in own decl statement");
         }
+
+        if (decl == null) {
+            throw new IdentificationError(currentTree, "Undeclared variable");
+        }
         return decl;
     }
 
@@ -473,6 +495,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
         if (decl == null){
            throw new IdentificationError(currentTree, "Undeclared value " + id.spelling);
         }
+
         else{
             id.decl = decl;
         }
