@@ -30,6 +30,8 @@ public class ASTIdentifier implements Visitor<String,Object> {
     public static boolean showPosition = false;
     public AST currentTree = null;
     public String currentVarDecl;
+    public boolean inPrivate = false;
+    public boolean inStatic = false;
 
     /**
      * print text representation of AST to stdout
@@ -186,6 +188,8 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public Object visitMethodDecl(MethodDecl m, String arg){
         SId.openScope(); // move to scope 2
+        inPrivate = m.isPrivate;
+        inStatic = m.isStatic;
         show(arg, "(" + (m.isPrivate ? "private": "public")
                 + (m.isStatic ? " static) " :") ") + m.toString());
         m.type.visit(this, indent(arg));
@@ -202,6 +206,8 @@ public class ASTIdentifier implements Visitor<String,Object> {
         for (Statement s: sl) {
             s.visit(this, pfx);
         }
+        inPrivate = false;
+        inStatic = false;
         SId.closeScope();
         return null;
     }
@@ -243,7 +249,9 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public Object visitClassType(ClassType ct, String arg){
         show(arg, ct);
-        ct.className.visit(this, indent(arg));
+        Declaration ret;
+        ret = visitIdentifier(ct.className, indent(arg));
+
         return null;
     }
 
@@ -347,35 +355,74 @@ public class ASTIdentifier implements Visitor<String,Object> {
     //
     ///////////////////////////////////////////////////////////////////////////////
 
-    public Object visitUnaryExpr(UnaryExpr expr, String arg){
+    public TypeDenoter visitUnaryExpr(UnaryExpr expr, String arg){
+        show(arg, expr);
+        TypeDenoter ret;
+        expr.operator.visit(this, indent(arg));
+        ret = (TypeDenoter) expr.expr.visit(this, indent(indent(arg)));
+        if (ret.typeKind == TypeKind.INT && expr.operator.spelling.equals("-")){
+            return ret;
+        }
+        if(ret.typeKind == TypeKind.BOOLEAN && expr.operator.spelling.equals("!")){
+            return ret;
+        }
+        throw new Error("Improper type for unary expression");
+    }
+
+    public TypeDenoter visitBinaryExpr(BinaryExpr expr, String arg){
         show(arg, expr);
         expr.operator.visit(this, indent(arg));
-        expr.expr.visit(this, indent(indent(arg)));
+        TypeDenoter left = (TypeDenoter) expr.left.visit(this, indent(indent(arg)));
+        TypeDenoter right = (TypeDenoter)expr.right.visit(this, indent(indent(arg)));
+        switch (expr.operator.spelling){
+            case "&&":
+            case "||":
+                if(left.typeKind == TypeKind.BOOLEAN && right.typeKind == TypeKind.BOOLEAN){
+                    return new BaseType(TypeKind.BOOLEAN, expr.operator.posn);
+                }
+                else {
+                    throw new Error("Improper boolean expression");
+                }
+            case ">":
+            case "<":
+            case "<=":
+            case ">=":
+                if(left.typeKind == TypeKind.INT && right.typeKind == TypeKind.INT){
+                    return new BaseType(TypeKind.BOOLEAN, expr.operator.posn);
+                }
+                else {
+                    throw new Error("Improper boolean expression");
+                }
+            case "+":
+            case"-":
+            case"*":
+            case"/":
+                if(left.typeKind == TypeKind.INT && right.typeKind == TypeKind.INT){
+                    return new BaseType(TypeKind.INT, expr.operator.posn);
+                }
+                else {
+                    throw new Error("Improper boolean expression");
+                }
+            case "==":
+            case "!=":
+        }
         return null;
     }
 
-    public Object visitBinaryExpr(BinaryExpr expr, String arg){
-        show(arg, expr);
-        expr.operator.visit(this, indent(arg));
-        expr.left.visit(this, indent(indent(arg)));
-        expr.right.visit(this, indent(indent(arg)));
-        return null;
-    }
-
-    public Object visitRefExpr(RefExpr expr, String arg){
+    public TypeDenoter visitRefExpr(RefExpr expr, String arg){
         show(arg, expr);
         expr.ref.visit(this, indent(arg));
         return null;
     }
 
-    public Object visitIxExpr(IxExpr ie, String arg){
+    public TypeDenoter visitIxExpr(IxExpr ie, String arg){
         show(arg, ie);
         ie.ref.visit(this, indent(arg));
         ie.ixExpr.visit(this, indent(arg));
         return null;
     }
 
-    public Object visitCallExpr(CallExpr expr, String arg){
+    public TypeDenoter visitCallExpr(CallExpr expr, String arg){
         show(arg, expr);
         expr.functionRef.visit(this, indent(arg));
         ExprList al = expr.argList;
@@ -387,20 +434,19 @@ public class ASTIdentifier implements Visitor<String,Object> {
         return null;
     }
 
-    public Object visitLiteralExpr(LiteralExpr expr, String arg){
+    public TypeDenoter visitLiteralExpr(LiteralExpr expr, String arg){
         show(arg, expr);
-        expr.lit.visit(this, indent(arg));
-        return null;
+        return (TypeDenoter) expr.lit.visit(this, indent(arg));
     }
 
-    public Object visitNewArrayExpr(NewArrayExpr expr, String arg){
+    public TypeDenoter visitNewArrayExpr(NewArrayExpr expr, String arg){
         show(arg, expr);
         expr.eltType.visit(this, indent(arg));
         expr.sizeExpr.visit(this, indent(arg));
         return null;
     }
 
-    public Object visitNewObjectExpr(NewObjectExpr expr, String arg){
+    public TypeDenoter visitNewObjectExpr(NewObjectExpr expr, String arg){
         show(arg, expr);
         expr.classtype.visit(this, indent(arg));
         return null;
@@ -415,6 +461,9 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public Declaration visitThisRef(ThisRef ref, String arg) {
         show(arg,ref);
+        if(this.inStatic){
+            throw new IdentificationError(currentTree, "Using this in a static method");
+        }
         return curClass;
     }
 
@@ -510,17 +559,17 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public Object visitIntLiteral(IntLiteral num, String arg){
         show(arg, quote(num.spelling) + " " + num.toString());
-        return null;
+        return new BaseType(TypeKind.INT, num.posn);
     }
 
     public Object visitBooleanLiteral(BooleanLiteral bool, String arg){
         show(arg, quote(bool.spelling) + " " + bool.toString());
-        return null;
+        return new BaseType(TypeKind.BOOLEAN, bool.posn);
     }
 
-    public Object visitNullLiteral (NullLiteral n1, String arg){
+    public TypeDenoter visitNullLiteral (NullLiteral n1, String arg){
         show(arg, quote(n1.spelling) + " " + n1.toString());
-        return null;
+        return new BaseType(TypeKind.UNSUPPORTED, n1.posn);
     }
 }
 
