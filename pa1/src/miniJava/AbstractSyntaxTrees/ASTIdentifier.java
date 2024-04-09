@@ -32,6 +32,10 @@ public class ASTIdentifier implements Visitor<String,Object> {
     public String currentVarDecl;
     public boolean inPrivate = false;
     public boolean inStatic = false;
+    public boolean ownScope = false;
+    public boolean privIssue = false;
+
+    public Object retType = TypeKind.VOID;
 
     /**
      * print text representation of AST to stdout
@@ -192,7 +196,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
         inStatic = m.isStatic;
         show(arg, "(" + (m.isPrivate ? "private": "public")
                 + (m.isStatic ? " static) " :") ") + m.toString());
-        m.type.visit(this, indent(arg));
+        retType = m.type.visit(this, indent(arg));
         show(indent(arg), quote(m.name) + " methodname");
         ParameterDeclList pdl = m.parameterDeclList;
         show(arg, "  ParameterDeclList [" + pdl.size() + "]");
@@ -206,6 +210,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
         for (Statement s: sl) {
             s.visit(this, pfx);
         }
+
         inPrivate = false;
         inStatic = false;
         SId.closeScope();
@@ -228,6 +233,9 @@ public class ASTIdentifier implements Visitor<String,Object> {
     }
 
     public Object visitVarDecl(VarDecl vd, String arg){
+        if (ownScope){
+            throw new Error("Cant have own scope");
+        }
         SId.addDeclaration(vd.name, vd);
         show(arg, vd);
         vd.type.visit(this, indent(arg));
@@ -242,23 +250,25 @@ public class ASTIdentifier implements Visitor<String,Object> {
     //
     ///////////////////////////////////////////////////////////////////////////////
 
-    public Object visitBaseType(BaseType type, String arg){
+    public TypeKind visitBaseType(BaseType type, String arg){
         show(arg, type.typeKind + " " + type.toString());
-        return null;
+        return type.typeKind;
     }
 
-    public Object visitClassType(ClassType ct, String arg){
+    public TypeKind visitClassType(ClassType ct, String arg){
         show(arg, ct);
         Declaration ret;
         ret = visitIdentifier(ct.className, indent(arg));
-
-        return null;
+        if (ret.getClass() != ClassDecl.class){
+            throw new IdentificationError(this.currentTree, "Class not declared " + ret.name);
+        }
+        return ct.typeKind;
     }
 
-    public Object visitArrayType(ArrayType type, String arg){
+    public TypeKind visitArrayType(ArrayType type, String arg){
         show(arg, type);
         type.eltType.visit(this, indent(arg));
-        return null;
+        return type.typeKind;
     }
 
 
@@ -270,6 +280,8 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public Object visitBlockStmt(BlockStmt stmt, String arg){
         SId.openScope();
+        boolean temp = ownScope;
+        ownScope = false;
         show(arg, stmt);
         StatementList sl = stmt.sl;
         show(arg,"  StatementList [" + sl.size() + "]");
@@ -278,6 +290,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
             s.visit(this, pfx);
         }
         SId.closeScope();
+        ownScope = temp;
         return null;
     }
 
@@ -288,11 +301,18 @@ public class ASTIdentifier implements Visitor<String,Object> {
         stmt.varDecl.visit(this, indent(arg));
         currentVarDecl = stmt.varDecl.name;
 
-        stmt.initExp.visit(this, indent(arg));
-        currentVarDecl = "";
+        TypeDenoter ExpType = (TypeDenoter) stmt.initExp.visit(this, indent(arg));
+
 
         // put type of var into the indentifier
-        currentVarDecl = null;
+        currentVarDecl = "";
+
+        if (stmt.varDecl.type.typeKind != ExpType.typeKind && ExpType.typeKind != TypeKind.VOID){
+            if(stmt.varDecl.type.typeKind == TypeKind.ARRAY && ((ArrayType) stmt.varDecl.type).eltType.typeKind == ExpType.typeKind ){
+                return null;
+            }
+            throw new Error("Assigned variable wrong type");
+        }
         return null;
     }
 
@@ -314,8 +334,11 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public Object visitCallStmt(CallStmt stmt, String arg){
         show(arg,stmt);
-        stmt.methodRef.visit(this, indent(arg));
-
+        Object refd = stmt.methodRef.visit(this, indent(arg));
+        if (refd.getClass() == ClassDecl.class){
+            //meant to fix fail337
+            throw new IdentificationError(currentTree, "Use this for method call");
+        }
         ExprList al = stmt.argList;
         show(arg,"  ExprList [" + al.size() + "]");
         String pfx = arg + "  . ";
@@ -327,24 +350,38 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public Object visitReturnStmt(ReturnStmt stmt, String arg){
         show(arg,stmt);
-        if (stmt.returnExpr != null)
-            stmt.returnExpr.visit(this, indent(arg));
+
+        if (stmt.returnExpr != null) {
+            if (retType !=( (TypeDenoter) stmt.returnExpr.visit(this, indent(arg))).typeKind){
+                throw new IdentificationError(currentTree, "Return type doesn't match");
+            }
+        }
+        else if (retType != TypeKind.VOID){
+            throw new IdentificationError(currentTree, "Return type doesn't match");
+        }
         return null;
     }
 
     public Object visitIfStmt(IfStmt stmt, String arg){
         show(arg,stmt);
         stmt.cond.visit(this, indent(arg));
+        ownScope = true;
         stmt.thenStmt.visit(this, indent(arg));
-        if (stmt.elseStmt != null)
+        ownScope = false;
+        if (stmt.elseStmt != null) {
+            ownScope = true;
             stmt.elseStmt.visit(this, indent(arg));
+            ownScope = false;
+        }
         return null;
     }
 
     public Object visitWhileStmt(WhileStmt stmt, String arg){
         show(arg, stmt);
         stmt.cond.visit(this, indent(arg));
+        ownScope = true;
         stmt.body.visit(this, indent(arg));
+        ownScope = false;
         return null;
     }
 
@@ -391,7 +428,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
                     return new BaseType(TypeKind.BOOLEAN, expr.operator.posn);
                 }
                 else {
-                    throw new Error("Improper boolean expression");
+                    throw new Error("Improper inequality expression");
                 }
             case "+":
             case"-":
@@ -401,7 +438,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
                     return new BaseType(TypeKind.INT, expr.operator.posn);
                 }
                 else {
-                    throw new Error("Improper boolean expression");
+                    throw new Error("Improper mathematical expression");
                 }
             case "==":
             case "!=":
@@ -411,27 +448,31 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public TypeDenoter visitRefExpr(RefExpr expr, String arg){
         show(arg, expr);
-        expr.ref.visit(this, indent(arg));
-        return null;
+        Declaration refdecl = (Declaration) expr.ref.visit(this, indent(arg));
+        return refdecl.type;
     }
 
     public TypeDenoter visitIxExpr(IxExpr ie, String arg){
         show(arg, ie);
-        ie.ref.visit(this, indent(arg));
+        Declaration reffed = (Declaration) ie.ref.visit(this, indent(arg));
+        if (reffed.type.typeKind != TypeKind.INT){
+            throw new IdentificationError(currentTree, "Index must be an int");
+        }
         ie.ixExpr.visit(this, indent(arg));
-        return null;
+        return ((ArrayType) reffed.type).eltType;
     }
 
     public TypeDenoter visitCallExpr(CallExpr expr, String arg){
         show(arg, expr);
-        expr.functionRef.visit(this, indent(arg));
+        Declaration reffed = (Declaration) expr.functionRef.visit(this, indent(arg));
+
         ExprList al = expr.argList;
         show(arg,"  ExprList + [" + al.size() + "]");
         String pfx = arg + "  . ";
         for (Expression e: al) {
             e.visit(this, pfx);
         }
-        return null;
+        return reffed.type;
     }
 
     public TypeDenoter visitLiteralExpr(LiteralExpr expr, String arg){
@@ -443,13 +484,13 @@ public class ASTIdentifier implements Visitor<String,Object> {
         show(arg, expr);
         expr.eltType.visit(this, indent(arg));
         expr.sizeExpr.visit(this, indent(arg));
-        return null;
+        return expr.eltType;
     }
 
     public TypeDenoter visitNewObjectExpr(NewObjectExpr expr, String arg){
         show(arg, expr);
         expr.classtype.visit(this, indent(arg));
-        return null;
+        return expr.classtype;
     }
 
 
@@ -464,6 +505,8 @@ public class ASTIdentifier implements Visitor<String,Object> {
         if(this.inStatic){
             throw new IdentificationError(currentTree, "Using this in a static method");
         }
+
+        privIssue = false;
         return curClass;
     }
 
@@ -473,6 +516,10 @@ public class ASTIdentifier implements Visitor<String,Object> {
         if (decl.name.equals(currentVarDecl)){
             throw new IdentificationError(currentTree, "Cant use var in own decl statement");
         }
+
+        privIssue = false;
+
+
 
         if (decl == null) {
             throw new IdentificationError(currentTree, "Undeclared variable");
@@ -484,9 +531,23 @@ public class ASTIdentifier implements Visitor<String,Object> {
     public Declaration visitQRef(QualRef qr, String arg) {
         Declaration ref = null;
         Declaration rhs;
+        rhs =  visitIdentifier(qr.id, indent(arg));// think this could be ref
         show(arg, qr);
         if (qr.ref.getClass() == IdRef.class){
             ref = visitIdRef(((IdRef) qr.ref), indent(arg));
+
+            if(((IdRef) qr.ref).id.kind == TokenType.ID ) {
+                if (ref.name != curClass.name) {
+                    if (rhs.getClass() == FieldDecl.class) {
+                        if (((FieldDecl) rhs).isPrivate) {
+
+                            throw new IdentificationError(currentTree, "Private");
+
+                        }
+                    }
+                }
+            }
+
             if(((IdRef) qr.ref).id.kind == TokenType.CLASS ){ //i think this is proper but maybe check decl
                 if(qr.id.decl.getClass()  == MethodDecl.class){
                     if (!((MethodDecl) qr.id.decl).isStatic){
@@ -497,7 +558,13 @@ public class ASTIdentifier implements Visitor<String,Object> {
                     if (!((FieldDecl) qr.id.decl).isStatic){
                         throw new IdentificationError(this.currentTree, "Accessing a nonstatic member from a class");
                     }
+
                 }
+            }
+
+
+            if (ref.getClass()== MethodDecl.class){
+                return ref;
             }
 
         }
@@ -541,7 +608,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public Declaration visitIdentifier(Identifier id, String arg){
         Declaration decl = SId.findDeclaration(id, curClass);
-        if (decl == null){
+        if (decl == null  ){
            throw new IdentificationError(currentTree, "Undeclared value " + id.spelling);
         }
 
@@ -569,7 +636,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public TypeDenoter visitNullLiteral (NullLiteral n1, String arg){
         show(arg, quote(n1.spelling) + " " + n1.toString());
-        return new BaseType(TypeKind.UNSUPPORTED, n1.posn);
+        return new BaseType(TypeKind.VOID, n1.posn);
     }
 }
 
