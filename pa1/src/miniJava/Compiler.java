@@ -11,6 +11,7 @@ import java.io.InputStream;
 
 public class Compiler {
 	// Main function, the file to compile will be an argument.
+
 	public static void main(String[] args) {
 		// TODO: Instantiate the ErrorReporter object
 		ErrorReporter _errors = new ErrorReporter();

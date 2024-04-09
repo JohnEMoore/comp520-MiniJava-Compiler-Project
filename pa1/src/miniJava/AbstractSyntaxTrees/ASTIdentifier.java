@@ -313,14 +313,21 @@ public class ASTIdentifier implements Visitor<String,Object> {
             }
             throw new Error("Assigned variable wrong type");
         }
+        if (stmt.varDecl.type.typeKind == TypeKind.CLASS && ExpType.getClass() == ClassType.class && stmt.varDecl.name != ((ClassType) ExpType).className.spelling){
+            throw new Error("Assigned variable wrong type");
+        }
+
         return null;
     }
 
     public Object visitAssignStmt(AssignStmt stmt, String arg){
         show(arg,stmt);
-        stmt.ref.visit(this, indent(arg));
-        stmt.val.visit(this, indent(arg));
-        // the type check goes here
+        Declaration refDecl = (Declaration)  stmt.ref.visit(this, indent(arg));
+        TypeDenoter valType = (TypeDenoter) stmt.val.visit(this, indent(arg));
+        if (valType == null || valType.typeKind != refDecl.type.typeKind){
+            throw new IdentificationError(currentTree, "Invalid type assignment");
+        }
+
         return null;
     }
 
@@ -335,10 +342,11 @@ public class ASTIdentifier implements Visitor<String,Object> {
     public Object visitCallStmt(CallStmt stmt, String arg){
         show(arg,stmt);
         Object refd = stmt.methodRef.visit(this, indent(arg));
-        if (refd.getClass() == ClassDecl.class){
+        if (refd.getClass() != MethodDecl.class ){
             //meant to fix fail337
             throw new IdentificationError(currentTree, "Use this for method call");
         }
+
         ExprList al = stmt.argList;
         show(arg,"  ExprList [" + al.size() + "]");
         String pfx = arg + "  . ";
@@ -364,7 +372,10 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public Object visitIfStmt(IfStmt stmt, String arg){
         show(arg,stmt);
-        stmt.cond.visit(this, indent(arg));
+        TypeDenoter condStmt = (TypeDenoter) stmt.cond.visit(this, indent(arg));
+        if (condStmt.typeKind != TypeKind.BOOLEAN){
+            throw new IdentificationError(currentTree, "If statement doesn't have type bool");
+        }
         ownScope = true;
         stmt.thenStmt.visit(this, indent(arg));
         ownScope = false;
@@ -449,13 +460,17 @@ public class ASTIdentifier implements Visitor<String,Object> {
     public TypeDenoter visitRefExpr(RefExpr expr, String arg){
         show(arg, expr);
         Declaration refdecl = (Declaration) expr.ref.visit(this, indent(arg));
+        if (refdecl.getClass() == MethodDecl.class){
+            throw new IdentificationError(currentTree, "method is not a reference");
+        }
         return refdecl.type;
     }
 
     public TypeDenoter visitIxExpr(IxExpr ie, String arg){
         show(arg, ie);
         Declaration reffed = (Declaration) ie.ref.visit(this, indent(arg));
-        if (reffed.type.typeKind != TypeKind.INT){
+        TypeDenoter indexType = ((TypeDenoter)  ie.ixExpr.visit(this, indent(arg)));
+        if (indexType.typeKind != TypeKind.INT){
             throw new IdentificationError(currentTree, "Index must be an int");
         }
         ie.ixExpr.visit(this, indent(arg));
@@ -465,7 +480,9 @@ public class ASTIdentifier implements Visitor<String,Object> {
     public TypeDenoter visitCallExpr(CallExpr expr, String arg){
         show(arg, expr);
         Declaration reffed = (Declaration) expr.functionRef.visit(this, indent(arg));
-
+        if (reffed.getClass() != MethodDecl.class){
+            throw new IdentificationError(currentTree, "call must be a method");
+        }
         ExprList al = expr.argList;
         show(arg,"  ExprList + [" + al.size() + "]");
         String pfx = arg + "  . ";
@@ -516,6 +533,9 @@ public class ASTIdentifier implements Visitor<String,Object> {
         if (decl.name.equals(currentVarDecl)){
             throw new IdentificationError(currentTree, "Cant use var in own decl statement");
         }
+        if(this.inStatic && (decl.getClass() == FieldDecl.class && !((FieldDecl) decl).isStatic)){
+            throw new IdentificationError(currentTree, "Nonstatic var in static method");
+        }
 
         privIssue = false;
 
@@ -531,10 +551,14 @@ public class ASTIdentifier implements Visitor<String,Object> {
     public Declaration visitQRef(QualRef qr, String arg) {
         Declaration ref = null;
         Declaration rhs;
-        rhs =  visitIdentifier(qr.id, indent(arg));// think this could be ref
         show(arg, qr);
         if (qr.ref.getClass() == IdRef.class){
             ref = visitIdRef(((IdRef) qr.ref), indent(arg));
+
+            Declaration temp = curClass;
+            curClass = ref;
+            rhs =  visitIdentifier(qr.id, indent(arg));// think this could be ref
+            curClass = temp;
 
             if(((IdRef) qr.ref).id.kind == TokenType.ID ) {
                 if (ref.name != curClass.name) {
@@ -546,9 +570,12 @@ public class ASTIdentifier implements Visitor<String,Object> {
                         }
                     }
                 }
+
             }
 
-            if(((IdRef) qr.ref).id.kind == TokenType.CLASS ){ //i think this is proper but maybe check decl
+
+
+            if(((IdRef) qr.ref).id.decl.getClass() == ClassDecl.class ){ //i think this is proper but maybe check decl
                 if(qr.id.decl.getClass()  == MethodDecl.class){
                     if (!((MethodDecl) qr.id.decl).isStatic){
                         throw new IdentificationError(this.currentTree, "Accessing a nonstatic member from a class");
@@ -567,6 +594,8 @@ public class ASTIdentifier implements Visitor<String,Object> {
                 return ref;
             }
 
+            return rhs;
+
         }
         else if(qr.ref.getClass() == ThisRef.class){
             ref = visitThisRef(((ThisRef) qr.ref), indent(arg));
@@ -576,6 +605,23 @@ public class ASTIdentifier implements Visitor<String,Object> {
            if (((QualRef) qr.ref).id.decl.getClass() == MethodDecl.class){
                throw new IdentificationError(this.currentTree, "Using a method as a reference");
            }
+            Declaration temp = curClass;
+            curClass = ref;
+            rhs =  visitIdentifier(qr.id, indent(arg));// think this could be ref
+            curClass = temp;
+
+
+            if(((QualRef) qr.ref).id.kind == TokenType.ID ) {
+                if (ref.name != curClass.name) {
+                    if (rhs.getClass() == FieldDecl.class) {
+                        if (((FieldDecl) rhs).isPrivate) {
+
+                            throw new IdentificationError(currentTree, "Private");
+
+                        }
+                    }
+                }
+            }
             //ref = qr.id.decl;
 
             /*
@@ -595,6 +641,11 @@ public class ASTIdentifier implements Visitor<String,Object> {
         curClass = ref;
         rhs =  visitIdentifier(qr.id, indent(arg));// think this could be ref
         curClass = temp;
+
+
+
+
+
         //qr.ref.visit(this, indent(arg));
         return rhs;
     }
