@@ -53,7 +53,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
         SourcePosition defPosn = new SourcePosition(0, 0);
         FieldDeclList PsFields = new FieldDeclList();
         MethodDeclList PsMethods = new MethodDeclList();
-        ParameterDecl PsParam = new ParameterDecl(new BaseType(TypeKind.INT, defPosn), "x", defPosn);
+        ParameterDecl PsParam = new ParameterDecl(new BaseType(TypeKind.INT, defPosn), "n", defPosn);
         ParameterDeclList PsParamList = new ParameterDeclList();
         PsParamList.add(PsParam);
         MethodDecl PsMethod = new MethodDecl(new FieldDecl(false, false, new BaseType(TypeKind.VOID, new SourcePosition(0, 0)), "println",  new SourcePosition(0, 0)), PsParamList, new StatementList(), defPosn);
@@ -311,10 +311,10 @@ public class ASTIdentifier implements Visitor<String,Object> {
             if(stmt.varDecl.type.typeKind == TypeKind.ARRAY && ((ArrayType) stmt.varDecl.type).eltType.typeKind == ExpType.typeKind ){
                 return null;
             }
-            throw new Error("Assigned variable wrong type");
+            throw new IdentificationError(currentTree, "Assigned variable wrong type");
         }
-        if (stmt.varDecl.type.typeKind == TypeKind.CLASS && ExpType.getClass() == ClassType.class && stmt.varDecl.name != ((ClassType) ExpType).className.spelling){
-            throw new Error("Assigned variable wrong type");
+        if (stmt.varDecl.type.typeKind == TypeKind.CLASS && ExpType.getClass() == ClassType.class && ! ((ClassType) stmt.varDecl.type).className.spelling.equals( ((ClassType) ExpType).className.spelling)){
+            throw new IdentificationError(currentTree, "Assigned variable wrong type");
         }
 
         return null;
@@ -350,8 +350,13 @@ public class ASTIdentifier implements Visitor<String,Object> {
         ExprList al = stmt.argList;
         show(arg,"  ExprList [" + al.size() + "]");
         String pfx = arg + "  . ";
+        int i = 0;
         for (Expression e: al) {
-            e.visit(this, pfx);
+            TypeDenoter type = (TypeDenoter) e.visit(this, pfx);
+            if ( type.typeKind != ((MethodDecl) refd).parameterDeclList.get(i).type.typeKind){
+                throw new IdentificationError(currentTree, "Improper type in arg list");
+            }
+            i += 1;
         }
         return null;
     }
