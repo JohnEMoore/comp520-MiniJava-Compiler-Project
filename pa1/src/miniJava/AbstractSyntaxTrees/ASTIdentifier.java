@@ -458,6 +458,12 @@ public class ASTIdentifier implements Visitor<String,Object> {
                 }
             case "==":
             case "!=":
+                if(left.typeKind == right.typeKind){
+                    return new BaseType(TypeKind.BOOLEAN, expr.operator.posn);
+                }
+                else {
+                    throw new Error("Improper inequality expression");
+                }
         }
         return null;
     }
@@ -466,7 +472,8 @@ public class ASTIdentifier implements Visitor<String,Object> {
         show(arg, expr);
         Declaration refdecl = (Declaration) expr.ref.visit(this, indent(arg));
         if (refdecl.getClass() == MethodDecl.class){
-            throw new IdentificationError(currentTree, "method is not a reference");
+            //throw new IdentificationError(currentTree, "method is not a reference");
+            // methods can be references
         }
         return refdecl.type;
     }
@@ -617,13 +624,28 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
 
             if(((QualRef) qr.ref).id.kind == TokenType.ID ) {
-                if (ref.name != curClass.name) {
+                if (ref.getClass() == ClassDecl.class &&  ref.name != curClass.name) {
                     if (rhs.getClass() == FieldDecl.class) {
                         if (((FieldDecl) rhs).isPrivate) {
 
                             throw new IdentificationError(currentTree, "Private");
 
                         }
+                    }
+                }
+                if (ref.getClass() == FieldDecl.class){
+                    if(!curClass.name.equals((((ClassType) ref.type).className.spelling))){
+
+
+                        if (rhs.getClass() == FieldDecl.class) {
+                            if (((FieldDecl) rhs).isPrivate) {
+
+                                throw new IdentificationError(currentTree, "Private");
+
+                            }
+                            }
+
+
                     }
                 }
             }
