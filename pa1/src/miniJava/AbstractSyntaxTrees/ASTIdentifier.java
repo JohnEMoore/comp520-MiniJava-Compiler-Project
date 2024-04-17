@@ -257,11 +257,13 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public TypeKind visitClassType(ClassType ct, String arg){
         show(arg, ct);
+        SId.classRef = true;
         Declaration ret;
         ret = visitIdentifier(ct.className, indent(arg));
         if (ret.getClass() != ClassDecl.class){
             throw new IdentificationError(this.currentTree, "Class not declared " + ret.name);
         }
+        SId.classRef = false;
         return ct.typeKind;
     }
 
@@ -307,7 +309,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
         // put type of var into the indentifier
         currentVarDecl = "";
 
-        if (stmt.varDecl.type.typeKind != ExpType.typeKind && ExpType.typeKind != TypeKind.VOID){
+        if (stmt.varDecl.type.typeKind != ExpType.typeKind && ExpType.typeKind != TypeKind.NULL){
             if(stmt.varDecl.type.typeKind == TypeKind.ARRAY && ((ArrayType) stmt.varDecl.type).eltType.typeKind == ExpType.typeKind ){
                 return null;
             }
@@ -324,8 +326,15 @@ public class ASTIdentifier implements Visitor<String,Object> {
         show(arg,stmt);
         Declaration refDecl = (Declaration)  stmt.ref.visit(this, indent(arg));
         TypeDenoter valType = (TypeDenoter) stmt.val.visit(this, indent(arg));
-        if (valType == null || valType.typeKind != refDecl.type.typeKind){
+        if (valType == null){
             throw new IdentificationError(currentTree, "Invalid type assignment");
+        }
+        else if(valType.typeKind != refDecl.type.typeKind){
+            if (!(refDecl.type.getClass().equals(ArrayType.class) && stmt.val.getClass().equals(NewArrayExpr.class) && ((ArrayType) refDecl.type).eltType.typeKind.equals(valType.typeKind))){
+                throw new IdentificationError(currentTree, "Invalid type assignment");
+            }
+
+
         }
 
         return null;
@@ -365,7 +374,8 @@ public class ASTIdentifier implements Visitor<String,Object> {
         show(arg,stmt);
 
         if (stmt.returnExpr != null) {
-            if (retType !=( (TypeDenoter) stmt.returnExpr.visit(this, indent(arg))).typeKind){
+            TypeDenoter TD = (TypeDenoter) stmt.returnExpr.visit(this, indent(arg));
+            if (retType != TD.typeKind){
                 throw new IdentificationError(currentTree, "Return type doesn't match");
             }
         }
@@ -458,7 +468,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
                 }
             case "==":
             case "!=":
-                if(left.typeKind == right.typeKind){
+                if(left.typeKind == right.typeKind && (left.typeKind != TypeKind.CLASS || (((ClassType) left).className.spelling == ((ClassType) right).className.spelling) )){
                     return new BaseType(TypeKind.BOOLEAN, expr.operator.posn);
                 }
                 else {
@@ -471,9 +481,12 @@ public class ASTIdentifier implements Visitor<String,Object> {
     public TypeDenoter visitRefExpr(RefExpr expr, String arg){
         show(arg, expr);
         Declaration refdecl = (Declaration) expr.ref.visit(this, indent(arg));
-        if (refdecl.getClass() == MethodDecl.class){
-            //throw new IdentificationError(currentTree, "method is not a reference");
+        if (refdecl.getClass() == MethodDecl.class && !expr.getClass().equals( CallExpr.class)){
+            throw new IdentificationError(currentTree, "no variable or reference with that name");
             // methods can be references
+        }
+        if (expr.ref.getClass() == ThisRef.class){
+            return new BaseType(TypeKind.CLASS, expr.ref.posn);
         }
         return refdecl.type;
     }
@@ -498,8 +511,13 @@ public class ASTIdentifier implements Visitor<String,Object> {
         ExprList al = expr.argList;
         show(arg,"  ExprList + [" + al.size() + "]");
         String pfx = arg + "  . ";
+        int i = 0;
         for (Expression e: al) {
-            e.visit(this, pfx);
+            TypeDenoter type = (TypeDenoter) e.visit(this, pfx);
+            if ( type.typeKind != ((MethodDecl) reffed).parameterDeclList.get(i).type.typeKind){
+                throw new IdentificationError(currentTree, "Improper type in arg list");
+            }
+            i += 1;
         }
         return reffed.type;
     }
@@ -569,6 +587,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
             Declaration temp = curClass;
             curClass = ref;
+            SId.memberRef = true;
             rhs =  visitIdentifier(qr.id, indent(arg));// think this could be ref
             curClass = temp;
 
@@ -603,9 +622,9 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
 
             if (ref.getClass()== MethodDecl.class){
-                return ref;
+                //return ref;
             }
-
+            SId.memberRef = false;
             return rhs;
 
         }
@@ -619,6 +638,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
            }
             Declaration temp = curClass;
             curClass = ref;
+            SId.memberRef = true;
             rhs =  visitIdentifier(qr.id, indent(arg));// think this could be ref
             curClass = temp;
 
@@ -666,6 +686,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
         Declaration temp = curClass;
         curClass = ref;
+        SId.memberRef = true;
         rhs =  visitIdentifier(qr.id, indent(arg));// think this could be ref
         curClass = temp;
 
@@ -674,6 +695,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
 
         //qr.ref.visit(this, indent(arg));
+        SId.memberRef = false;
         return rhs;
     }
 
@@ -714,7 +736,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
     public TypeDenoter visitNullLiteral (NullLiteral n1, String arg){
         show(arg, quote(n1.spelling) + " " + n1.toString());
-        return new BaseType(TypeKind.VOID, n1.posn);
+        return new BaseType(TypeKind.NULL, n1.posn);
     }
 }
 
