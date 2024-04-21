@@ -92,7 +92,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
      * @param node    AST node, will be shown by name
      */
     private void show(String prefix, AST node) {
-       // System.out.println(prefix + node.toString());
+        // System.out.println(prefix + node.toString());
     }
 
     /**
@@ -330,8 +330,10 @@ public class ASTIdentifier implements Visitor<String,Object> {
             throw new IdentificationError(currentTree, "Invalid type assignment");
         }
         else if(valType.typeKind != refDecl.type.typeKind){
-            if (!(refDecl.type.getClass().equals(ArrayType.class) && stmt.val.getClass().equals(NewArrayExpr.class) && ((ArrayType) refDecl.type).eltType.typeKind.equals(valType.typeKind))){
-                throw new IdentificationError(currentTree, "Invalid type assignment");
+            if (!(refDecl.type.getClass().equals(ArrayType.class) && stmt.val.getClass().equals(NewArrayExpr.class) && ((ArrayType) refDecl.type).eltType.typeKind.equals(valType.typeKind) )){
+                if( valType.typeKind != TypeKind.NULL ) {
+                    throw new IdentificationError(currentTree, "Invalid type assignment");
+                }
             }
 
 
@@ -468,7 +470,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
                 }
             case "==":
             case "!=":
-                if(left.typeKind == right.typeKind && (left.typeKind != TypeKind.CLASS || (((ClassType) left).className.spelling == ((ClassType) right).className.spelling) )){
+                if( left.typeKind == TypeKind.NULL || right.typeKind == TypeKind.NULL || left.typeKind == right.typeKind && (left.typeKind != TypeKind.CLASS || (((ClassType) left).className.spelling == ((ClassType) right).className.spelling) ) ){
                     return new BaseType(TypeKind.BOOLEAN, expr.operator.posn);
                 }
                 else {
@@ -592,14 +594,30 @@ public class ASTIdentifier implements Visitor<String,Object> {
             curClass = temp;
 
             if(((IdRef) qr.ref).id.kind == TokenType.ID ) {
-                if (ref.name != curClass.name) {
-                    if (rhs.getClass() == FieldDecl.class) {
-                        if (((FieldDecl) rhs).isPrivate) {
+                if (ref.getClass() == VarDecl.class && ref.type.getClass() == ClassType.class){
+                    if ((!(((ClassType) ref.type).className.spelling.equals(curClass.name)))) {
+                        if (rhs.getClass() == FieldDecl.class) {
+                            if (((FieldDecl) rhs).isPrivate) {
 
-                            throw new IdentificationError(currentTree, "Private");
+                                throw new IdentificationError(currentTree, "Private");
 
+                            }
                         }
                     }
+                }
+                else{
+
+                    if (!ref.name.equals(curClass.name)) {
+                        if (rhs.getClass() == FieldDecl.class) {
+                            if (((FieldDecl) rhs).isPrivate) {
+
+                                throw new IdentificationError(currentTree, "Private");
+
+                            }
+                        }
+                    }
+
+
                 }
 
             }
@@ -632,10 +650,10 @@ public class ASTIdentifier implements Visitor<String,Object> {
             ref = visitThisRef(((ThisRef) qr.ref), indent(arg));
         }
         else{ //ref is a qual ref
-           ref = visitQRef(((QualRef) qr.ref), indent(arg));
-           if (((QualRef) qr.ref).id.decl.getClass() == MethodDecl.class){
-               throw new IdentificationError(this.currentTree, "Using a method as a reference");
-           }
+            ref = visitQRef(((QualRef) qr.ref), indent(arg));
+            if (((QualRef) qr.ref).id.decl.getClass() == MethodDecl.class){
+                throw new IdentificationError(this.currentTree, "Using a method as a reference");
+            }
             Declaration temp = curClass;
             curClass = ref;
             SId.memberRef = true;
@@ -644,7 +662,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
 
             if(((QualRef) qr.ref).id.kind == TokenType.ID ) {
-                if (ref.getClass() == ClassDecl.class &&  ref.name != curClass.name) {
+                if (ref.getClass() == ClassDecl.class &&  !ref.name.equals( curClass.name)) {
                     if (rhs.getClass() == FieldDecl.class) {
                         if (((FieldDecl) rhs).isPrivate) {
 
@@ -663,7 +681,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
                                 throw new IdentificationError(currentTree, "Private");
 
                             }
-                            }
+                        }
 
 
                     }
@@ -709,7 +727,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
     public Declaration visitIdentifier(Identifier id, String arg){
         Declaration decl = SId.findDeclaration(id, curClass);
         if (decl == null  ){
-           throw new IdentificationError(currentTree, "Undeclared value " + id.spelling);
+            throw new IdentificationError(currentTree, "Undeclared value " + id.spelling);
         }
 
         else{
