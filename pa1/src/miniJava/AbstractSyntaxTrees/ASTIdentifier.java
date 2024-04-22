@@ -10,6 +10,8 @@ import miniJava.SyntacticAnalyzer.SourcePosition;
 import miniJava.SyntacticAnalyzer.Token;
 import miniJava.SyntacticAnalyzer.TokenType;
 
+import javax.xml.stream.FactoryConfigurationError;
+
 /*
  * Display AST in text form, one node per line, using indentation to show
  * subordinate nodes below a parent node.
@@ -34,6 +36,8 @@ public class ASTIdentifier implements Visitor<String,Object> {
     public boolean inStatic = false;
     public boolean ownScope = false;
     public boolean privIssue = false;
+
+    public boolean hasMain = false;
 
     public Object retType = TypeKind.VOID;
 
@@ -141,6 +145,7 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
             }
         }
+
         for (ClassDecl c: prog.classDeclList){
             c.visit(this, pfx);
         }
@@ -169,6 +174,10 @@ public class ASTIdentifier implements Visitor<String,Object> {
 
         for (MethodDecl m: clas.methodDeclList) {
             m.visit(this, pfx);
+        }
+
+        if(!hasMain){
+            throw new IdentificationError(currentTree, "No public static void main(String[]) found");
         }
 
         return null;
@@ -209,6 +218,9 @@ public class ASTIdentifier implements Visitor<String,Object> {
         show(arg, "  StmtList [" + sl.size() + "]");
         for (Statement s: sl) {
             s.visit(this, pfx);
+        }
+        if( m.name.equals("main") &&  m.isStatic && !m.isPrivate && pdl.size() == 1 && pdl.get(0).type.getClass() == ArrayType.class && ((ArrayType) pdl.get(0).type).eltType.getClass() == ClassType.class && ((ClassType) ((ArrayType) pdl.get(0).type).eltType ).className.spelling.equals("String") ){
+            hasMain = true;
         }
 
         inPrivate = false;

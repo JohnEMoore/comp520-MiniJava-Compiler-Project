@@ -4,7 +4,7 @@
  */
 class Pass392 {
 
-    public static void main(String [] args) { 
+    public static void main(String [] args) {
 
 	A ai = new A();
 	B bi = new B();
