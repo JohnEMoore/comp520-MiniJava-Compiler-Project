@@ -7,9 +7,11 @@ import miniJava.CodeGeneration.x64.*;
 import miniJava.CodeGeneration.x64.ISA.*;
 
 public class CodeGenerator implements Visitor<Object, Object> {
-	private ErrorReporter _errors;
+	private final ErrorReporter _errors;
 	private InstructionList _asm; // our list of instructions that are used to make the code section
-	
+
+
+	private int mainLoc;
 	public CodeGenerator(ErrorReporter errors) {
 		this._errors = errors;
 	}
@@ -70,12 +72,165 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	@Override
 	public Object visitPackage(Package prog, Object arg) {
 		// TODO: visit relevant parts of our AST
+
+
+		ClassDeclList cl = prog.classDeclList;
+		for (ClassDecl c: prog.classDeclList){
+			c.visit(this, null);
+		}
+		return null;
+
+	}
+
+	public Object visitClass(ClassDecl clas, Object arg){
+
+		for (FieldDecl f: clas.fieldDeclList) {
+			//TODO take type from nonstatic fields, use it to calculate offset for that and subsequent fields (alternatively this could be done during the run each call)
+			//TODO take static fields and place in stack
+			f.visit(this, null);
+
+
+		}
+
+
+		for (MethodDecl m: clas.methodDeclList) {
+			if(m.name.equals("main") &&  m.isStatic && !m.isPrivate && m.parameterDeclList.size() == 1 &&  m.parameterDeclList.get(0).type.getClass() == ArrayType.class && ((ArrayType)  m.parameterDeclList.get(0).type).eltType.getClass() == ClassType.class && ((ClassType) ((ArrayType)  m.parameterDeclList.get(0).type).eltType ).className.spelling.equals("String")){
+				mainLoc = _asm.getSize();
+				m.visit(this, null);
+			}
+
+		}
+
+
 		return null;
 	}
-	
+
+	public Object visitFieldDecl(FieldDecl f, String arg){
+		f.type.visit(this, null);
+		return null;
+	}
+
+	public Object visitMethodDecl(MethodDecl m, String arg){
+		m.type.visit(this, null);
+		ParameterDeclList pdl = m.parameterDeclList;
+		for (ParameterDecl pd: pdl) {
+			//TODO put each parameter on the stack, with a entity from rbp
+			pd.visit(this, null);
+		}
+		StatementList sl = m.statementList;
+		for (Statement s: sl) {
+
+			s.visit(this, null);
+		}
+		return null;
+	}
+
+	public Object visitParameterDecl(ParameterDecl pd, String arg){
+		pd.type.visit(this, null);
+
+		return null;
+	}
+
+	public Object visitVarDecl(VarDecl vd, String arg){
+		vd.type.visit(this, null);
+		return null;
+	}
+
+
+	///////////////////////////////////////////////////////////////////////////////
+	//
+	// TYPES
+	//
+	///////////////////////////////////////////////////////////////////////////////
+
+	public Object visitBaseType(BaseType type, String arg){
+		return null;
+	}
+
+	public Object visitClassType(ClassType ct, String arg){
+		ct.className.visit(this, null);
+		return null;
+	}
+
+	public Object visitArrayType(ArrayType type, String arg){
+		type.eltType.visit(this, null);
+		return null;
+	}
+
+	///////////////////////////////////////////////////////////////////////////////
+	//
+	// STATEMENTS
+	//
+	///////////////////////////////////////////////////////////////////////////////
+
+	public Object visitBlockStmt(BlockStmt stmt, String arg){
+		StatementList sl = stmt.sl;
+		for (Statement s: sl) {
+			s.visit(this,null);
+		}
+		return null;
+	}
+
+	public Object visitVardeclStmt(VarDeclStmt stmt, String arg){
+		stmt.varDecl.visit(this, null);
+		stmt.initExp.visit(this, null);
+		return null;
+	}
+
+	public Object visitAssignStmt(AssignStmt stmt, String arg){
+		stmt.ref.visit(this, null);
+		stmt.val.visit(this, null);
+		return null;
+	}
+
+	public Object visitIxAssignStmt(IxAssignStmt stmt, String arg){
+		stmt.ref.visit(this, null);
+		stmt.ix.visit(this, null);
+		stmt.exp.visit(this, null);
+		return null;
+	}
+
+	public Object visitCallStmt(CallStmt stmt, String arg){
+		stmt.methodRef.visit(this, null);
+		ExprList al = stmt.argList;
+
+		for (Expression e: al) {
+			e.visit(this, null);
+		}
+		return null;
+	}
+
+	public Object visitReturnStmt(ReturnStmt stmt, String arg){
+		if (stmt.returnExpr != null)
+			stmt.returnExpr.visit(this, null);
+		return null;
+	}
+
+	public Object visitIfStmt(IfStmt stmt, String arg){
+		stmt.cond.visit(this, null);
+		stmt.thenStmt.visit(this, null);
+		if (stmt.elseStmt != null)
+			stmt.elseStmt.visit(this, null);
+		return null;
+	}
+
+	public Object visitWhileStmt(WhileStmt stmt, String arg){
+		stmt.cond.visit(this, null);
+		stmt.body.visit(this, null);
+		return null;
+	}
+
+
+
+
+
+
+
+
+
 	public void makeElf(String fname) {
 		ELFMaker elf = new ELFMaker(_errors, _asm.getSize(), 8); // bss ignored until PA5, set to 8
-		elf.outputELF(fname, _asm.getBytes(), ??); // TODO: set the location of the main method
+		elf.outputELF(fname, _asm.getBytes(), mainLoc);// TODO: set the location of the main method
 	}
 	
 	private int makeMalloc() {
@@ -96,6 +251,15 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	
 	private int makePrintln() {
 		// TODO: how can we generate the assembly to println?
+
+		int idxStart = _asm.add( new Mov_rmi(new R(Reg64.RAX,true),0x01) ); // call 1 WRITE
+		//_asm.add( new Mov_rrm(new R(Reg64.RDI, false))); // TODO function arg + 48 into RDI
+		_asm.add( new Mov_rmi(	new R(Reg64.RSI,true),0x1000) ); // character
+		_asm.add( new Mov_rmi(	new R(Reg64.RDX,true),0x03) 	);
+
+
 		return -1;
 	}
 }
+
+

@@ -220,6 +220,9 @@ public class ASTIdentifier implements Visitor<String,Object> {
             s.visit(this, pfx);
         }
         if( m.name.equals("main") &&  m.isStatic && !m.isPrivate && pdl.size() == 1 && pdl.get(0).type.getClass() == ArrayType.class && ((ArrayType) pdl.get(0).type).eltType.getClass() == ClassType.class && ((ClassType) ((ArrayType) pdl.get(0).type).eltType ).className.spelling.equals("String") ){
+            if(hasMain){
+                throw new IdentificationError(currentTree, "cant have multiple main methods");
+            }
             hasMain = true;
         }
 

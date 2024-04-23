@@ -38,7 +38,7 @@ public class ELFMaker {
 		// next is the .text
 		text.sectionName = ".text";
 		text.sh_size = textSize;
-		text.sh_flags = ??; // TODO: what flags does the text section get?
+		text.sh_flags = PF_R; // TODO: what flags does the text section get?
 		text.sh_type = ??; // TODO: what type is the text section?
 		text.data = new byte[1]; // placeholder, do not change
 		sections.add( text );
@@ -47,14 +47,14 @@ public class ELFMaker {
 		bss.sectionName = ".bss";
 		bss.data = null;
 		bss.sh_size = bssSize;
-		bss.sh_type = ??; // TODO: what type is the bss section?
-		bss.sh_flags = ??; // TODO: what are the flags of the bss section?
+		bss.sh_type = 2; // TODO: what type is the bss section?
+		bss.sh_flags = PF_W; // TODO: what are the flags of the bss section?
 		sections.add( bss );
 		
 		// make .shstrtab
 		shstrtab.sectionName = ".shstrtab";
-		shstrtab.sh_type = ??; // TODO: what is the type of the shstrtab section?
-		shstrtab.sh_flags = ??; // TODO: what are the flags of this section?
+		shstrtab.sh_type = 4; // TODO: what is the type of the shstrtab section?
+		shstrtab.sh_flags = PF_X; // TODO: what are the flags of this section?
 		sections.add( shstrtab );
 		shstrtab.data = makeSectionStrings(sections);
 		shstrtab.sh_size = shstrtab.data.length;

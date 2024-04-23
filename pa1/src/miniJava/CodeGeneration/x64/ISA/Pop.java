@@ -8,9 +8,12 @@ import miniJava.CodeGeneration.x64.x64;
 public class Pop extends Instruction {
 	public Pop(Reg64 r) {
 		// TODO: first, check if the Reg64 is R8-R15, if it is, set one of rexB,rexW,rexR,rexX to true (which one?)
+		if(r.regIdx >7 && r.regIdx < 16){
+			rexR = true;
+		}
 		// TODO: second, find the opcode for pop r, where r is a plain 64-bit register
 		// NOTE: x64.getIdx(r) will return a 0-7 index, whereas r.getIdx() returns an index from 0-15
-		opcodeBytes.write( ?? );
+		opcodeBytes.write( 0x58 + r.getIdx() );
 	}
 	
 	public Pop(R modrmsib) {
