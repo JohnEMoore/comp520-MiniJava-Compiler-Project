@@ -20,8 +20,9 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 	private boolean isStatic = false;
 
-	private ArrayList<Instruction> islandOfMisfitToys = new ArrayList<>();
-	private HashMap<String, Integer> methodAddresses = new HashMap<>();
+	private  HashMap<MethodDecl, ArrayList<Instruction>> missingLocations = new HashMap<>();
+	private MethodDecl lastMethod;
+	private HashMap<MethodDecl, Integer> methodAddresses = new HashMap<>();
 
 	public CodeGenerator(ErrorReporter errors) {
 		this._errors = errors;
@@ -141,14 +142,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 		// visit all methodDecls, generate their code, if there is a call to a
 		for (MethodDecl m: clas.methodDeclList) {
-			if(m.name.equals("main") &&  m.isStatic && !m.isPrivate && m.parameterDeclList.size() == 1 &&  m.parameterDeclList.get(0).type.getClass() == ArrayType.class && ((ArrayType)  m.parameterDeclList.get(0).type).eltType.getClass() == ClassType.class && ((ClassType) ((ArrayType)  m.parameterDeclList.get(0).type).eltType ).className.spelling.equals("String")){
-				mainLoc = _asm.getSize();
-			}
 
-			for(int k = 0; k < islandOfMisfitToys.size(); k++){
-				//resolve missing addresses
-			}
-			m.instructionLocation = _asm.getSize();
 			m.visit(this, null);
 		}
 
@@ -164,6 +158,21 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	public Object visitMethodDecl(MethodDecl m, Object arg){
 		RBPoffset = -8; // resets RBP offset at start of method, need to get trimmed to pass all classes
 		m.type.visit(this, null); // dont think this matters
+
+		if(m.name.equals("main") &&  m.isStatic && !m.isPrivate && m.parameterDeclList.size() == 1 &&  m.parameterDeclList.get(0).type.getClass() == ArrayType.class && ((ArrayType)  m.parameterDeclList.get(0).type).eltType.getClass() == ClassType.class && ((ClassType) ((ArrayType)  m.parameterDeclList.get(0).type).eltType ).className.spelling.equals("String")){
+			mainLoc = _asm.getSize();
+		}
+		m.instructionLocation = _asm.getSize();
+		methodAddresses.put(m, m.instructionLocation);
+		ArrayList<Instruction> missing = missingLocations.getOrDefault(m, new ArrayList<>());
+		for(int k = 0; k < missing.size(); k++){
+			_asm.patch( missing.get(k).listIdx, new Jmp(_asm.getSize() - missing.get(k).startAddress - 5) );
+		}
+		methodAddresses.put(m, m.instructionLocation); // think this doesnt matterb ut i dont care
+		m.instructionLocation = _asm.getSize();
+
+
+
 		ParameterDeclList pdl = m.parameterDeclList;
 		int i = 16; // first param is at RBP + 16
 		if(!m.isStatic){
@@ -183,6 +192,11 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		for (Statement s: sl) {
 			s.visit(this, null);
 		}
+		_asm.add( new Mov_rrm(new R( Reg64.RSP, Reg64.RBP )));
+		_asm.add( new Mov_rmr(new R( Reg64.RBP, Reg64.RBP ))); // "\x48\x89\x6D\x00"
+
+
+
 		return null;
 	}
 
@@ -285,20 +299,37 @@ public class CodeGenerator implements Visitor<Object, Object> {
 			al.get(i).visit(this, null);
 			_asm.add( new Push(Reg64.RAX) ); //load params onto stack in reverse order
 		}
+
 		//TODO check if method isnt static and if so, push object pointer onto stack
-		{
-			_asm.add( new Push(Reg64.RCX) );
+		if(isStatic){
+			_asm.add( new Pop(Reg64.RAX) );
+			_asm.add( new Push(Reg64.RAX) );
+		}
+		_asm.add(new Push(Reg64.RBP));
+		// instruction location
+		//_asm.add( new Pop(Reg64.RBX) );
+		if (lastMethod.instructionLocation == -1){ // location unknown
+			Instruction toMethod = new Jmp(0);
+			_asm.add(toMethod); //populates instruction fields
+			ArrayList<Instruction> curList = missingLocations.getOrDefault(lastMethod, new ArrayList<>());
+			curList.add(toMethod);
+			missingLocations.put(lastMethod, curList);
+			_asm.add(toMethod);
+		}
+		else{
+			Instruction toMethod = new Jmp(_asm.getSize(), lastMethod.instructionLocation, false);
+			_asm.add(toMethod);
 		}
 
-		for (int u = 0; u < islandOfMisfitToys.size(); u++){
 
-		}
-
-		Instruction methodJump = (new Jmp( 0)); // to jump past the else stmt
-		_asm.add(methodJump);
-		_asm.patch( methodJump.listIdx, new Jmp(_asm.getSize() - methodJump.startAddress - 5) );
+		//TODO call the method
 
 		return null;
+
+
+
+
+
 	}
 
 	public Object visitReturnStmt(ReturnStmt stmt, Object arg){
@@ -465,17 +496,37 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitCallExpr(CallExpr expr, Object arg){
-		expr.functionRef.visit(this, null); // have to find if static
+
+		expr.functionRef.visit(this, true); // have to find if static
+		_asm.add( new Pop(Reg64.RCX) ); // put addy in RCX
 		ExprList al = expr.argList;
 		for (int i = al.size() -1; i >= 0; i--) {
 			al.get(i).visit(this, null);
-			_asm.add( new Pop(Reg64.RAX) ); //load params onto stack in reverse order
+			_asm.add( new Push(Reg64.RAX) ); //load params onto stack in reverse order
 		}
 		//TODO check if method isnt static and if so, push object pointer onto stack
 		if(isStatic){
-
 			_asm.add( new Pop(Reg64.RAX) );
+			_asm.add( new Push(Reg64.RAX) );
 		}
+
+		// instruction location
+		//_asm.add( new Pop(Reg64.RBX) );
+		_asm.add(new Push(Reg64.RBP));
+		if (lastMethod.instructionLocation == -1){ // location unknown
+			Instruction toMethod = new Jmp(0);
+			_asm.add(toMethod); //populates instruction fields
+			ArrayList<Instruction> curList = missingLocations.getOrDefault(lastMethod, new ArrayList<>());
+			curList.add(toMethod);
+			missingLocations.put(lastMethod, curList);
+			_asm.add(toMethod);
+		}
+		else{
+			Instruction toMethod = new Jmp(_asm.getSize(), lastMethod.instructionLocation, false);
+			_asm.add(toMethod);
+		}
+
+
 		//TODO call the method
 
 		return null;
@@ -528,9 +579,25 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 	public Object visitIdRef(IdRef ref, Object arg) {
 		ref.id.visit(this, null);
-		if(ref.id.decl.getClass() == MethodDecl.class || ref.id.decl.getClass() == FieldDecl.class){
-			isStatic = true;
+
+		if(ref.id.decl.getClass() == MethodDecl.class ){
+			lastMethod = (MethodDecl) ref.id.decl;
+			_asm.add(new Mov_rmi(new R(Reg64.RCX, true), ((MethodDecl) ref.id.decl).instructionLocation));  //48 C7 c1
+			_asm.add(new Push(Reg64.RCX));
+			return null;
 		}
+
+		if( ref.id.decl.getClass() == FieldDecl.class){
+
+				if (((FieldDecl) ref.id.decl).isStatic){
+					isStatic = true;
+				}
+				else{
+					isStatic = false;
+				}
+			}
+
+
 		if(arg == Boolean.TRUE){ //true means getting address (assign statements, qualref)
 			_asm.add(new Lea(new R(ref.entityRef, ref.entityOffset, Reg64.RAX)));
 			_asm.add(new Push(Reg64.RAX)); // put mem loc on stack
@@ -544,8 +611,20 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 	public Object visitQRef(QualRef qr, Object arg) {
 		if (qr.id.decl.getClass() == MethodDecl.class){
-			qr.ref.visit(this, Boolean.TRUE); // get address it will be on stack
-			_asm.add( new Pop(Reg64.RCX) );
+			qr.id.visit(this, null); // instruction location now on stack
+			if (((MethodDecl) qr.id.decl).isStatic){
+				isStatic = true;
+
+				qr.ref.visit(this, Boolean.TRUE); // get address of instance it will be on stack
+
+			}
+			else{
+
+			}
+
+
+			return null;
+
 
 		}
 
