@@ -7,6 +7,7 @@ import miniJava.CodeGeneration.x64.*;
 import miniJava.CodeGeneration.x64.ISA.*;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 
 public class CodeGenerator implements Visitor<Object, Object> {
 	private final ErrorReporter _errors;
@@ -17,7 +18,10 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	private int staticStack = 0;
 	private int RBPoffset = -8;
 
-	private ArrayList<Instruction> islandOfMisfitToys;
+	private boolean isStatic = false;
+
+	private ArrayList<Instruction> islandOfMisfitToys = new ArrayList<>();
+	private HashMap<String, Integer> methodAddresses = new HashMap<>();
 
 	public CodeGenerator(ErrorReporter errors) {
 		this._errors = errors;
@@ -140,9 +144,9 @@ public class CodeGenerator implements Visitor<Object, Object> {
 			if(m.name.equals("main") &&  m.isStatic && !m.isPrivate && m.parameterDeclList.size() == 1 &&  m.parameterDeclList.get(0).type.getClass() == ArrayType.class && ((ArrayType)  m.parameterDeclList.get(0).type).eltType.getClass() == ClassType.class && ((ClassType) ((ArrayType)  m.parameterDeclList.get(0).type).eltType ).className.spelling.equals("String")){
 				mainLoc = _asm.getSize();
 			}
+
 			for(int k = 0; k < islandOfMisfitToys.size(); k++){
 				//resolve missing addresses
-
 			}
 			m.instructionLocation = _asm.getSize();
 			m.visit(this, null);
@@ -236,7 +240,9 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitVardeclStmt(VarDeclStmt stmt, Object arg){
+		// location of var added to the decl in visit
 		stmt.varDecl.visit(this, null);
+		//get value of exp
 		stmt.initExp.visit(this, null);
 		//_asm.add( new Pop(Reg64.RAX) ); // have to get value from the expression  EXP IN RAX
 		_asm.add(new Mov_rmr(new R(Reg64.RBP, stmt.varDecl.entityOffset, Reg64.RAX))); // move value RAX to [RBP - offset]
@@ -244,28 +250,34 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitAssignStmt(AssignStmt stmt, Object arg){
+		// visit reference, returning the location in memory of the object we are assigning to
 		stmt.ref.visit(this, null);
+
 		Class stmtClass = stmt.ref.getClass();
 		stmt.val.visit(this, null);
-		//_asm.add( new Pop(Reg64.RAX) ); // have to get value from the expression
-
-		_asm.add(new Mov_rmr(new R(stmt.ref.entityRef, stmt.ref.entityOffset, Reg64.RAX))); // move value RAX to [<ref location> - offset]
+		_asm.add( new Pop(Reg64.RCX) ); // have to get value from the ref on stack store in RCX
+		_asm.add(new Mov_rmr(new R(Reg64.RCX, Reg64.RAX))); // move value RAX to [<ref location> - offset]
 		return null;
 	}
 
 	public Object visitIxAssignStmt(IxAssignStmt stmt, Object arg){
+		// visit reference, where ref is the array's pointer to the heap
 		stmt.ref.visit(this, null);
+		// visit ix statement, this is an expression that will serve as the offset from the memory location
 		stmt.ix.visit(this, null);
-		_asm.add( new Push(Reg64.RAX) );
+		_asm.add( new Push(Reg64.RAX));
+		// this is the expression we will assign the value to
 		stmt.exp.visit(this, null);
-		_asm.add( new Pop(Reg64.RCX) );
-		_asm.add(new Mov_rmr(new R(Reg64.RBP, Reg64.RCX, 1, stmt.ref.entityOffset , Reg64.RAX)));
+		_asm.add( new Pop(Reg64.RCX) ); //rcx has the index
+		_asm.add( new Pop(Reg64.RBX) ); // RBX has pointer to array
+		_asm.add(new Mov_rmr(new R(Reg64.RBX, Reg64.RCX, 1, 0, Reg64.RAX)));
 
 		return null;
 	}
 
 	public Object visitCallStmt(CallStmt stmt, Object arg){
-		stmt.methodRef.visit(this, null);
+		stmt.methodRef.visit(this, true);
+		_asm.add( new Pop(Reg64.RBX) ); // get location of method instance
 		ExprList al = stmt.argList;
 
 
@@ -274,10 +286,17 @@ public class CodeGenerator implements Visitor<Object, Object> {
 			_asm.add( new Push(Reg64.RAX) ); //load params onto stack in reverse order
 		}
 		//TODO check if method isnt static and if so, push object pointer onto stack
-		if(stmt.methodRef.){
+		{
+			_asm.add( new Push(Reg64.RCX) );
+		}
+
+		for (int u = 0; u < islandOfMisfitToys.size(); u++){
 
 		}
 
+		Instruction methodJump = (new Jmp( 0)); // to jump past the else stmt
+		_asm.add(methodJump);
+		_asm.patch( methodJump.listIdx, new Jmp(_asm.getSize() - methodJump.startAddress - 5) );
 
 		return null;
 	}
@@ -431,27 +450,34 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitRefExpr(RefExpr expr, Object arg){
-		expr.ref.visit(this, null);
+		expr.ref.visit(this, Boolean.FALSE);
+
+		//expr expected to return value in RAX
 		return null;
 	}
 
 	public Object visitIxExpr(IxExpr ie, Object arg){
 		ie.ref.visit(this, null);
 		ie.ixExpr.visit(this, null);
-		_asm.add(new Mov_rmr( new R(Reg64.RAX, ie.ref.entityRef, 1, ie.ref.entityOffset, Reg64.RAX) ));
+		_asm.add( new Pop(Reg64.RCX) ); // get ref loc
+		_asm.add(new Mov_rmr( new R(Reg64.RAX, Reg64.RCX, 1, 0, Reg64.RAX) )); // 48 8b 04 08
 		return null;
 	}
 
 	public Object visitCallExpr(CallExpr expr, Object arg){
-		expr.functionRef.visit(this, null);
+		expr.functionRef.visit(this, null); // have to find if static
 		ExprList al = expr.argList;
 		for (int i = al.size() -1; i >= 0; i--) {
 			al.get(i).visit(this, null);
 			_asm.add( new Pop(Reg64.RAX) ); //load params onto stack in reverse order
 		}
 		//TODO check if method isnt static and if so, push object pointer onto stack
+		if(isStatic){
 
+			_asm.add( new Pop(Reg64.RAX) );
+		}
 		//TODO call the method
+
 		return null;
 	}
 
@@ -465,6 +491,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		expr.eltType.visit(this, null);
 		expr.sizeExpr.visit(this, null);
 		int firstInstIdx = makeMalloc();
+		// addy in RAX
 		return null;
 	}
 
@@ -481,18 +508,61 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	//
 	///////////////////////////////////////////////////////////////////////////////
 
+	//can put qual refs on stack
+	//can pass " new Boolean(true)" to decide if it should be the address location or the value at the address
+
+	// for B.sFunc(), you don't have to visit the left given B is a class and sFunc is a static function, you just find the method loc
+
+
 	public Object visitThisRef(ThisRef ref, Object arg) {
+		if(arg == Boolean.TRUE){ //true means getting address (assign statements, qualref)
+			_asm.add(new Lea(new R(ref.entityRef, ref.entityOffset, Reg64.RAX)));
+			_asm.add(new Push(Reg64.RAX)); // put mem loc on stack
+		}
+		else{ // false means getting value in address (ref expressions)
+			_asm.add(new Mov_rrm(new R(ref.entityRef, ref.entityOffset, Reg64.RAX)));
+			//_asm.add(new Push(Reg64.RAX));
+		}
 		return null;
 	}
 
 	public Object visitIdRef(IdRef ref, Object arg) {
 		ref.id.visit(this, null);
+		if(ref.id.decl.getClass() == MethodDecl.class || ref.id.decl.getClass() == FieldDecl.class){
+			isStatic = true;
+		}
+		if(arg == Boolean.TRUE){ //true means getting address (assign statements, qualref)
+			_asm.add(new Lea(new R(ref.entityRef, ref.entityOffset, Reg64.RAX)));
+			_asm.add(new Push(Reg64.RAX)); // put mem loc on stack
+		}
+		else{ // false means getting value in address (ref expressions)
+			_asm.add(new Mov_rrm(new R(ref.entityRef, ref.entityOffset, Reg64.RAX)));
+			//_asm.add(new Push(Reg64.RAX));
+		}
 		return null;
 	}
 
 	public Object visitQRef(QualRef qr, Object arg) {
-		qr.id.visit(this, null);
-		qr.ref.visit(this, null);
+		if (qr.id.decl.getClass() == MethodDecl.class){
+			qr.ref.visit(this, Boolean.TRUE); // get address it will be on stack
+			_asm.add( new Pop(Reg64.RCX) );
+
+		}
+
+		// visit context of the ref
+		qr.ref.visit(this, Boolean.TRUE); // get address it will be on stack
+		_asm.add( new Pop(Reg64.RCX) );
+		//qr.id.visit(this, arg);
+		if(arg == Boolean.TRUE){ //true means getting address (assign statements, qualref)
+			//_asm.add( new Pop(Reg64.RAX) );
+			_asm.add(new Lea(new R(Reg64.RCX, qr.ref.entityOffset, Reg64.RAX)));
+			_asm.add(new Push(Reg64.RAX)); // put mem loc on stack
+		}
+		else{ // false means getting value in address (ref expressions)
+			_asm.add(new Mov_rrm(new R(Reg64.RCX, qr.ref.entityOffset, Reg64.RAX)));
+			//_asm.add(new Push(Reg64.RAX));
+		}
+
 		return null;
 	}
 
@@ -566,10 +636,11 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	private int makePrintln() {
 		// TODO: how can we generate the assembly to println?
 
-		int idxStart = _asm.add( new Mov_rmi(new R(Reg64.RAX,true),0x01) ); // call 1 WRITE
-		//_asm.add( new Mov_rrm(new R(Reg64.RDI, true))); // TODO function arg + 48 into RDI
-		_asm.add( new Mov_rmi(	new R(Reg64.RSI,true),0x1000) ); // character
-		_asm.add( new Mov_rmi(	new R(Reg64.RDX,true),0x03) 	);
+		int idxStart = _asm.add( new Mov_rmi(new R(Reg64.RDX,true),0x01) ); // call 1 WRITE
+		_asm.add( new Add(new R(Reg64.RSI, true), 48)); // TODO function arg + 48 into RSI
+		//_asm.add( new Mov_rmi(	new R(Reg64.RSI,true),0x1000) ); // character
+		_asm.add( new Mov_rmi(	new R(Reg64.RDX,true),0x02) 	);
+		_asm.add( new Syscall() );
 
 
 		return -1;

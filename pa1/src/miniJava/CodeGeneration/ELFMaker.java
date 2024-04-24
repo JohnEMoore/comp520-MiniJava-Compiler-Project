@@ -39,7 +39,7 @@ public class ELFMaker {
 		text.sectionName = ".text";
 		text.sh_size = textSize;
 		text.sh_flags = PF_R; // TODO: what flags does the text section get?
-		text.sh_type = ??; // TODO: what type is the text section?
+		text.sh_type = SHT_PROGBITS; // TODO: what type is the text section?
 		text.data = new byte[1]; // placeholder, do not change
 		sections.add( text );
 		
@@ -47,13 +47,13 @@ public class ELFMaker {
 		bss.sectionName = ".bss";
 		bss.data = null;
 		bss.sh_size = bssSize;
-		bss.sh_type = 2; // TODO: what type is the bss section?
+		bss.sh_type = SHT_NOBITS; // TODO: what type is the bss section?
 		bss.sh_flags = PF_W; // TODO: what are the flags of the bss section?
 		sections.add( bss );
 		
 		// make .shstrtab
 		shstrtab.sectionName = ".shstrtab";
-		shstrtab.sh_type = 4; // TODO: what is the type of the shstrtab section?
+		shstrtab.sh_type = SHT_STRTAB; // TODO: what is the type of the shstrtab section?
 		shstrtab.sh_flags = PF_X; // TODO: what are the flags of this section?
 		sections.add( shstrtab );
 		shstrtab.data = makeSectionStrings(sections);
@@ -94,28 +94,28 @@ public class ELFMaker {
 		
 		text.data = textSection;
 		
-		phdr.p_type = ??; // TODO: what is the type of the program header segment?
-		phdr.p_flags = ??; // TODO: what are the flags of the program header segment?
+		phdr.p_type = PT_PHDR ; // TODO: what is the type of the program header segment?
+		phdr.p_flags = PF_R; // TODO: what are the flags of the program header segment?
 		phdr.p_offset = phStartAddress;
 		phdr.p_vaddr = phStartAddress;
 		phdr.p_paddr = phStartAddress;
 		phdr.p_filesz = segments.size() * elf.e_phentsize;
 		phdr.p_memsz = phdr.p_filesz;
-		
-		textSeg.p_type = ??; // TODO: type of the text segment?
-		textSeg.p_flags = ??; // TODO: flags for the text segment?
+
+		textSeg.p_type = PT_LOAD; // TODO: type of the text segment?
+		textSeg.p_flags = PF_X; // TODO: flags for the text segment?
 		textSeg.p_offset = text.sh_offset;
 		textSeg.p_vaddr = text.sh_addr;
 		textSeg.p_paddr = text.sh_addr;
 		textSeg.p_filesz = text.sh_size;
 		textSeg.p_memsz = text.sh_size;
-		
+
 		elf.e_entry = text.sh_addr + entrypoint;
 		elf.e_shoff = shStartAddress;
 		elf.e_phnum = (short)segments.size();
 		elf.e_shnum = (short)sections.size();
 		elf.e_shstrndx = (short)shstrtab.secIdx;
-		
+
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		writeELF(out,elf);
 		for( ELFSegment ph : segments )
@@ -339,7 +339,7 @@ public class ELFMaker {
 		e.data = null;
 		
 		e.sh_name = 0;
-		e.sh_type = ??; // TODO: what type is the null section?
+		e.sh_type = SHT_NULL; // TODO: what type is the null section?
 		e.sh_flags = 0;
 		e.sh_addr = 0;
 		e.sh_offset = 0;
