@@ -5,11 +5,12 @@
  */
 package miniJava.AbstractSyntaxTrees;
 
+import miniJava.CodeGeneration.x64.Reg64;
 import miniJava.SyntacticAnalyzer.SourcePosition;
 
 public class FieldDecl extends MemberDecl {
 
-	public int entityRef;
+	public Reg64 entityRef = Reg64.R15;
 	public int entityOffset;
 	
 	public FieldDecl(boolean isPrivate, boolean isStatic, TypeDenoter t, String name, SourcePosition posn){

@@ -215,6 +215,9 @@ public class ASTIdentifier implements Visitor<String,Object> {
             pd.visit(this, pfx);
         }
         StatementList sl = m.statementList;
+        if(sl.get(sl.size() - 1).getClass() != ReturnStmt.class){
+            throw new IdentificationError(currentTree, "no return");
+        }
         show(arg, "  StmtList [" + sl.size() + "]");
         for (Statement s: sl) {
             s.visit(this, pfx);

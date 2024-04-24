@@ -12,6 +12,8 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 
 	private int mainLoc;
+	private int staticStack = 0;
+	private int RBPoffset = -8;
 	public CodeGenerator(ErrorReporter errors) {
 		this._errors = errors;
 	}
@@ -69,12 +71,35 @@ public class CodeGenerator implements Visitor<Object, Object> {
 			makeElf("a.out");
 	}
 
+
+	/*
+	getting started:
+	do stack framing
+	variable declarations
+	offset from rbp
+
+	var decl: store with a variable - 8, then - 16
+
+	visit method parameters in reverse order,
+	decorate each parameter, so they go from +16, to 24, 32, etc
+	this should be at rbp + 16
+	because rbp has old rbp
+	rbp + 8 is return address
+
+	for variables that aren't static
+
+
+	can use lea to load (in lecture notes)
+	 */
+
 	@Override
 	public Object visitPackage(Package prog, Object arg) {
 		// TODO: visit relevant parts of our AST
 
 
 		ClassDeclList cl = prog.classDeclList;
+		_asm.add( new Mov_rrm(		new R(Reg64.R15,Reg64.RSP)) 	); // set reg 15 to current location
+		_asm.add(new Sub( new R(Reg64.R15, true), 8)); // set R15 to be at the location of the next thing I push (static var)
 		for (ClassDecl c: prog.classDeclList){
 			c.visit(this, null);
 		}
@@ -82,57 +107,83 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 	}
 
-	public Object visitClass(ClassDecl clas, Object arg){
+	public Object visitClassDecl(ClassDecl clas, Object arg){
+		int i = 0;
 
 		for (FieldDecl f: clas.fieldDeclList) {
 			//TODO take type from nonstatic fields, use it to calculate offset for that and subsequent fields (alternatively this could be done during the run each call)
 			//TODO take static fields and place in stack
-			f.visit(this, null);
+
+			if (!f.isStatic) {
+				f.entityOffset = i;
+				i += f.type.getClass() == BaseType.class ? 4 : 8;
+				f.visit(this, null);
+			}
+			else{
+				f.visit(this, null);
+				f.entityOffset = staticStack;
+				_asm.add( new Push(0) ); // fields are not declared in minijava
+				staticStack -= 8;
 
 
-		}
-
-
-		for (MethodDecl m: clas.methodDeclList) {
-			if(m.name.equals("main") &&  m.isStatic && !m.isPrivate && m.parameterDeclList.size() == 1 &&  m.parameterDeclList.get(0).type.getClass() == ArrayType.class && ((ArrayType)  m.parameterDeclList.get(0).type).eltType.getClass() == ClassType.class && ((ClassType) ((ArrayType)  m.parameterDeclList.get(0).type).eltType ).className.spelling.equals("String")){
-				mainLoc = _asm.getSize();
-				m.visit(this, null);
 			}
 
 		}
 
+		// visit all methodDecls, generate their code, if there is a call to a
+		for (MethodDecl m: clas.methodDeclList) {
+			if(m.name.equals("main") &&  m.isStatic && !m.isPrivate && m.parameterDeclList.size() == 1 &&  m.parameterDeclList.get(0).type.getClass() == ArrayType.class && ((ArrayType)  m.parameterDeclList.get(0).type).eltType.getClass() == ClassType.class && ((ClassType) ((ArrayType)  m.parameterDeclList.get(0).type).eltType ).className.spelling.equals("String")){
+				mainLoc = _asm.getSize();
+			}
+			m.instructionLocation = _asm.getSize();
+			m.visit(this, null);
+		}
+
 
 		return null;
 	}
 
-	public Object visitFieldDecl(FieldDecl f, String arg){
+	public Object visitFieldDecl(FieldDecl f, Object arg){
 		f.type.visit(this, null);
 		return null;
 	}
 
-	public Object visitMethodDecl(MethodDecl m, String arg){
-		m.type.visit(this, null);
+	public Object visitMethodDecl(MethodDecl m, Object arg){
+		RBPoffset = -8; // resets RBP offset at start of method, need to get trimmed to pass all classes
+		m.type.visit(this, null); // dont think this matters
 		ParameterDeclList pdl = m.parameterDeclList;
-		for (ParameterDecl pd: pdl) {
-			//TODO put each parameter on the stack, with a entity from rbp
-			pd.visit(this, null);
+		int i = 16; // first param is at RBP + 16
+		if(!m.isStatic){
+			// get this ref at RBP + 16
+			i += 8;
 		}
-		StatementList sl = m.statementList;
-		for (Statement s: sl) {
 
+		for (ParameterDecl pd: pdl) {
+			//dont need to place on stack, just know where each would be on stack relative to rbp when this gets called
+			//pd.entityRef = Reg64.RBP; using default of field since locals should all use rbp - will keep if no errors occur
+			pd.entityOffset = i;
+			i += 8;
+
+			//pd.visit(this, null);
+		}
+		StatementList sl = m.statementList; // have to generate code per statement
+		for (Statement s: sl) {
 			s.visit(this, null);
 		}
 		return null;
 	}
 
-	public Object visitParameterDecl(ParameterDecl pd, String arg){
+	public Object visitParameterDecl(ParameterDecl pd, Object arg){
 		pd.type.visit(this, null);
 
 		return null;
 	}
 
-	public Object visitVarDecl(VarDecl vd, String arg){
+	public Object visitVarDecl(VarDecl vd, Object arg){
 		vd.type.visit(this, null);
+		_asm.add( new Push(0) ); // push var on to stack
+		vd.entityOffset = RBPoffset; // set offset location and decrement offset
+		RBPoffset -= 8;
 		return null;
 	}
 
@@ -143,16 +194,16 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	//
 	///////////////////////////////////////////////////////////////////////////////
 
-	public Object visitBaseType(BaseType type, String arg){
+	public Object visitBaseType(BaseType type, Object arg){
 		return null;
 	}
 
-	public Object visitClassType(ClassType ct, String arg){
+	public Object visitClassType(ClassType ct, Object arg){
 		ct.className.visit(this, null);
 		return null;
 	}
 
-	public Object visitArrayType(ArrayType type, String arg){
+	public Object visitArrayType(ArrayType type, Object arg){
 		type.eltType.visit(this, null);
 		return null;
 	}
@@ -163,50 +214,63 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	//
 	///////////////////////////////////////////////////////////////////////////////
 
-	public Object visitBlockStmt(BlockStmt stmt, String arg){
+	public Object visitBlockStmt(BlockStmt stmt, Object arg){
 		StatementList sl = stmt.sl;
+		int scopeStart = RBPoffset;
 		for (Statement s: sl) {
 			s.visit(this,null);
 		}
+
+		_asm.add( new Sub(		new R(Reg64.RSP, true), RBPoffset - scopeStart )); // reclaim stack space
+		RBPoffset = scopeStart; // set RBP offset to where it was prior to scope.
 		return null;
 	}
 
-	public Object visitVardeclStmt(VarDeclStmt stmt, String arg){
+	public Object visitVardeclStmt(VarDeclStmt stmt, Object arg){
 		stmt.varDecl.visit(this, null);
 		stmt.initExp.visit(this, null);
+		//_asm.add( new Pop(Reg64.RAX) ); // have to get value from the expression  EXP IN RAX
+		_asm.add(new Mov_rmr(new R(Reg64.RBP, stmt.varDecl.entityOffset, Reg64.RAX))); // move value RAX to [RBP - offset]
 		return null;
 	}
 
-	public Object visitAssignStmt(AssignStmt stmt, String arg){
+	public Object visitAssignStmt(AssignStmt stmt, Object arg){
 		stmt.ref.visit(this, null);
+		Class stmtClass = stmt.ref.getClass();
 		stmt.val.visit(this, null);
+		//_asm.add( new Pop(Reg64.RAX) ); // have to get value from the expression
+
+		_asm.add(new Mov_rmr(new R(stmt.ref.entityRef, stmt.ref.entityOffset, Reg64.RAX))); // move value RAX to [<ref location> - offset]
 		return null;
 	}
 
-	public Object visitIxAssignStmt(IxAssignStmt stmt, String arg){
+	public Object visitIxAssignStmt(IxAssignStmt stmt, Object arg){
 		stmt.ref.visit(this, null);
 		stmt.ix.visit(this, null);
 		stmt.exp.visit(this, null);
 		return null;
 	}
 
-	public Object visitCallStmt(CallStmt stmt, String arg){
+	public Object visitCallStmt(CallStmt stmt, Object arg){
 		stmt.methodRef.visit(this, null);
 		ExprList al = stmt.argList;
 
-		for (Expression e: al) {
-			e.visit(this, null);
+
+		for (int i = al.size() -1; i >= 0; i--) {
+			al.get(i).visit(this, null);
+			_asm.add( new Push(Reg64.RAX) ); //load params onto stack in reverse order
 		}
+		//TODO check if method isnt static and if so, push object pointer onto stack
 		return null;
 	}
 
-	public Object visitReturnStmt(ReturnStmt stmt, String arg){
+	public Object visitReturnStmt(ReturnStmt stmt, Object arg){
 		if (stmt.returnExpr != null)
 			stmt.returnExpr.visit(this, null);
 		return null;
 	}
 
-	public Object visitIfStmt(IfStmt stmt, String arg){
+	public Object visitIfStmt(IfStmt stmt, Object arg){
 		stmt.cond.visit(this, null);
 		stmt.thenStmt.visit(this, null);
 		if (stmt.elseStmt != null)
@@ -214,11 +278,155 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		return null;
 	}
 
-	public Object visitWhileStmt(WhileStmt stmt, String arg){
+	public Object visitWhileStmt(WhileStmt stmt, Object arg){
 		stmt.cond.visit(this, null);
 		stmt.body.visit(this, null);
 		return null;
 	}
+
+///////////////////////////////////////////////////////////////////////////////
+	//
+	// EXPRESSIONS
+	//
+	///////////////////////////////////////////////////////////////////////////////
+
+	public Object visitUnaryExpr(UnaryExpr expr, Object arg){
+		expr.operator.visit(this, null);
+		expr.expr.visit(this, null);
+		//_asm.add( new Pop(Reg64.RAX) ); // have to get value from the expression for expr.expr
+		if(expr.operator.spelling.equals("!")){
+			_asm.add(new Not(new R(Reg64.RAX, true)));
+		}
+		else{ //-
+			_asm.add(new Neg(new R(Reg64.RAX, true)));
+		}
+		//_asm.add(new Push(new R(Reg64.RSP, Reg64.RAX))); // store result on stack STORED IN RAX
+
+		return null;
+	}
+
+	public Object visitBinaryExpr(BinaryExpr expr, Object arg){
+		expr.operator.visit(this, null);
+		expr.left.visit(this, null);
+		_asm.add(new Push(new R(Reg64.RSP, Reg64.RAX))); // store result on stack
+		expr.right.visit(this, null);
+		_asm.add(new Push(new R(Reg64.RSP, Reg64.RAX))); // store result on stack
+
+		_asm.add( new Pop(Reg64.RCX) ); // put top of stack (rhs result) in rcx
+		_asm.add( new Pop(Reg64.RAX) ); // put top of stack (lhs result) in rax
+
+		switch (expr.operator.spelling){
+			//TODO add expression evaluations
+			case "&&":
+			case "||":
+
+			case ">":
+			case "<":
+			case "<=":
+			case ">=":
+
+			case "+":
+			case"-":
+			case"*":
+			case"/":
+
+			case "==":
+			case "!=":
+
+		}
+
+		return null;
+	}
+
+	public Object visitRefExpr(RefExpr expr, Object arg){
+		expr.ref.visit(this, null);
+		return null;
+	}
+
+	public Object visitIxExpr(IxExpr ie, Object arg){
+		ie.ref.visit(this, null);
+		ie.ixExpr.visit(this, null);
+		return null;
+	}
+
+	public Object visitCallExpr(CallExpr expr, Object arg){
+		expr.functionRef.visit(this, null);
+		ExprList al = expr.argList;
+		for (int i = al.size() -1; i >= 0; i--) {
+			al.get(i).visit(this, null);
+			_asm.add( new Pop(Reg64.RAX) ); //load params onto stack in reverse order
+		}
+		//TODO check if method isnt static and if so, push object pointer onto stack
+
+		//TODO call the method
+		return null;
+	}
+
+	public Object visitLiteralExpr(LiteralExpr expr, Object arg){
+		expr.lit.visit(this, null);
+		return null;
+	}
+
+	public Object visitNewArrayExpr(NewArrayExpr expr, Object arg){
+		expr.eltType.visit(this, null);
+		expr.sizeExpr.visit(this, null);
+		return null;
+	}
+
+	public Object visitNewObjectExpr(NewObjectExpr expr, Object arg){
+		expr.classtype.visit(this, null);
+		return null;
+	}
+
+
+	///////////////////////////////////////////////////////////////////////////////
+	//
+	// REFERENCES
+	//
+	///////////////////////////////////////////////////////////////////////////////
+
+	public Object visitThisRef(ThisRef ref, Object arg) {
+		return null;
+	}
+
+	public Object visitIdRef(IdRef ref, Object arg) {
+		ref.id.visit(this, null);
+		return null;
+	}
+
+	public Object visitQRef(QualRef qr, Object arg) {
+		qr.id.visit(this, null);
+		qr.ref.visit(this, null);
+		return null;
+	}
+
+
+	///////////////////////////////////////////////////////////////////////////////
+	//
+	// TERMINALS
+	//
+	///////////////////////////////////////////////////////////////////////////////
+
+	public Object visitIdentifier(Identifier id, Object arg){
+		return null;
+	}
+
+	public Object visitOperator(Operator op, Object arg){
+		return null;
+	}
+
+	public Object visitIntLiteral(IntLiteral num, Object arg){
+		return null;
+	}
+
+	public Object visitBooleanLiteral(BooleanLiteral bool, Object arg){
+		return null;
+	}
+
+	public Object visitNullLiteral (NullLiteral n1, Object arg){
+		return null;
+	}
+
 
 
 
@@ -253,7 +461,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		// TODO: how can we generate the assembly to println?
 
 		int idxStart = _asm.add( new Mov_rmi(new R(Reg64.RAX,true),0x01) ); // call 1 WRITE
-		//_asm.add( new Mov_rrm(new R(Reg64.RDI, false))); // TODO function arg + 48 into RDI
+		//_asm.add( new Mov_rrm(new R(Reg64.RDI, true))); // TODO function arg + 48 into RDI
 		_asm.add( new Mov_rmi(	new R(Reg64.RSI,true),0x1000) ); // character
 		_asm.add( new Mov_rmi(	new R(Reg64.RDX,true),0x03) 	);
 
@@ -263,3 +471,34 @@ public class CodeGenerator implements Visitor<Object, Object> {
 }
 
 
+
+/*
+DOING CALLS:
+every method has SF start and end.
+
+
+
+function reference:
+if static: not THIS, either if or qual ref
+
+must be qual ref:
+lhs ref: will act as/become "this" for function call for the rhs
+rhs id
+
+inside method, don't know where you are
+this should be rbp + 16
+
+special check, if static dont push this
+
+so doing a call ref / call statement
+IF ID REF:
+	if in static:
+		do as normal function call
+	else:
+		push variable you have from stack (rbp +16), variable from stack
+
+
+
+decorate method decls, with instruction locations set at -1
+note decls that aren't known and patch later when found
+ */
