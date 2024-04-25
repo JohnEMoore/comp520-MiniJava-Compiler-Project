@@ -134,11 +134,13 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 			if (!f.isStatic) {
 				f.entityOffset = i;
+				f.entityRef = Reg64.RBP;
 				i += 8;
 				f.visit(this, null);
 			}
 			else{
 				f.visit(this, null);
+				f.entityRef = Reg64.R15;
 				f.entityOffset = staticStack;
 				_asm.add( new Push(0) ); // fields are not declared in minijava
 				staticStack -= 8;
@@ -210,8 +212,8 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		}
 		_asm.add( new Mov_rrm(new R( Reg64.RSP, Reg64.RBP )));
 		_asm.add( new Pop(Reg64.RBP)); // "\x48\x89\x6D\x00"
-
-
+		short onStack = (short) (m.parameterDeclList.size() + (m.isStatic ? 0 : 1));
+		_asm.add(new Ret(onStack, (short) 8));
 
 		return null;
 	}
@@ -281,11 +283,12 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 	public Object visitAssignStmt(AssignStmt stmt, Object arg){
 		// visit reference, returning the location in memory of the object we are assigning to
-		stmt.ref.visit(this, null);
+		stmt.ref.visit(this, true);
 
 		Class stmtClass = stmt.ref.getClass();
 		stmt.val.visit(this, null);
 		_asm.add( new Pop(Reg64.RCX) ); // have to get value from the ref on stack store in RCX
+
 		_asm.add(new Mov_rmr(new R(Reg64.RCX, 0, Reg64.RAX))); // move value RAX to [<ref location> - offset]
 		return null;
 	}
@@ -414,9 +417,9 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	public Object visitBinaryExpr(BinaryExpr expr, Object arg){
 		expr.operator.visit(this, null);
 		expr.left.visit(this, null);
-		_asm.add(new Push(new R(Reg64.RSP, Reg64.RAX))); // store result on stack
+		_asm.add(new Push(Reg64.RAX)); // store result on stack
 		expr.right.visit(this, null);
-		_asm.add(new Push(new R(Reg64.RSP, Reg64.RAX))); // store result on stack
+		_asm.add(new Push( Reg64.RAX)); // store result on stack
 
 
 		switch (expr.operator.spelling){
@@ -449,7 +452,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 			case"/":
 				_asm.add( new Pop(Reg64.RCX) ); // put top of stack (rhs result) in rcx
 				_asm.add( new Pop(Reg64.RAX) ); // put top of stack (lhs result) in rax
-				_asm.add( new Idiv( new R(Reg64.RCX, false)));
+				_asm.add( new Idiv( new R(Reg64.RAX, Reg64.RCX)));
 				break;
 			case ">":
 				_asm.add( new Pop(Reg64.RCX) ); // set RCX rhs
@@ -602,12 +605,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	public Object visitIdRef(IdRef ref, Object arg) {
 		ref.id.visit(this, null);
 
-		if(ref.id.decl.getClass() == MethodDecl.class ){
-			lastMethod = (MethodDecl) ref.id.decl;
-			_asm.add(new Mov_rmi(new R(Reg64.RCX, true), ((MethodDecl) ref.id.decl).instructionLocation));  //48 C7 c1
-			//_asm.add(new Push(Reg64.RCX));
-			return null;
-		}
+
 
 		if( ref.id.decl.getClass() == FieldDecl.class) {
 
@@ -658,13 +656,18 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		if (qr.id.decl.getClass() == MethodDecl.class){
 
 
+			lastMethod = (MethodDecl) qr.id.decl;
+			//_asm.add(new Push(Reg64.RCX));
+
+
+
 			if(qr.id.spelling.equals("println")){
 				isStatic = false;
 				((MethodDecl) qr.id.decl).instructionLocation = -2;
 				_asm.add(new Push(0));
 				return null;
 			}
-			qr.id.visit(this, Boolean.FALSE); // instruction location now on stack
+			//qr.id.visit(this, Boolean.FALSE); // instruction location now on stack
 			if (((MethodDecl) qr.id.decl).isStatic){
 				isStatic = true;
 				qr.ref.visit(this, Boolean.TRUE); // get address of instance it will be on stack
