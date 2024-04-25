@@ -165,6 +165,7 @@ public class R {
 		regByte = (mod<<6) | (getIdx(r) <<3 )  | getIdx(rdisp);
 
 		_b.write( regByte );
+		_b.write( disp );
 
 	}
 	
@@ -185,6 +186,11 @@ public class R {
 
 		regByte = (mod << 6 ) | ( getIdx(r) << 3 ) | 5;
 		int sib = (ss << 6) | 5 | getIdx(ridx) ;
+
+		_b.write( regByte );
+		_b.write( sib);
+		_b.write( disp );
+
 
 
 
@@ -207,6 +213,10 @@ public class R {
 		regByte = (mod<<6) | (getIdx(r) <<3 )  | 5;
 
 		int sib = (ss << 6)  | getIdx(rdisp) | getIdx(ridx);
+
+		_b.write( regByte );
+		_b.write( sib);
+		_b.write( disp );
 	}
 	
 	// [disp],r

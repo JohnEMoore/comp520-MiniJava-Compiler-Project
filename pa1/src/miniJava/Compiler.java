@@ -2,6 +2,8 @@ package miniJava;
 
 import miniJava.AbstractSyntaxTrees.*;
 import miniJava.AbstractSyntaxTrees.Package;
+import miniJava.CodeGeneration.CodeGenerator;
+import miniJava.CodeGeneration.ELFMaker;
 import miniJava.SyntacticAnalyzer.*;
 
 import java.io.File;
@@ -44,6 +46,10 @@ public class Compiler {
 					else{
 						try {
 							disp.showTree(ASTER);
+							CodeGenerator comp = new CodeGenerator(_errors);
+							comp.parse(ASTER);
+
+
 							System.out.println("Success");
 						}
 						catch (Error e){
