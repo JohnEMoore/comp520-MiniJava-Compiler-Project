@@ -218,15 +218,15 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		//_asm.(new Jmp(Reg64.RAX))
 		short onStack = (short) (m.parameterDeclList.size() + ( m.isStatic || m.name.equals("println") ? 0 : 1));
 		System.out.println(onStack);
-		_asm.add(new Ret(onStack, (short) 8));
-
 		if(m.instructionLocation == mainLoc){
 			_asm.add( new Mov_rmi(new R(Reg64.RAX,true),60) );
 			_asm.add( new Mov_rmi(new R(Reg64.RDI,true),0) );
 			_asm.add( new Syscall() );
-
 			return null;
 		}
+		_asm.add(new Ret(onStack, (short) 8));
+
+
 
 		return null;
 	}
