@@ -129,6 +129,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	public Object visitClassDecl(ClassDecl clas, Object arg){
 		int i = 0;
 
+
 		for (FieldDecl f: clas.fieldDeclList) {
 			//TODO take type from nonstatic fields, use it to calculate offset for that and subsequent fields (alternatively this could be done during the run each call)
 			//TODO take static fields and place in stack
@@ -166,10 +167,9 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitMethodDecl(MethodDecl m, Object arg){
-
-
 		_asm.add( new Push(Reg64.RBP));
-		_asm.add( new Mov_rrm(new R( Reg64.RBP, Reg64.RSP)));
+		_asm.add( new Mov_rrm(new R( Reg64.RSP, Reg64.RBP )));;
+
 
 
 
@@ -276,6 +276,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 			s.visit(this,null);
 		}
 
+
 		_asm.add( new Sub(		new R(Reg64.RSP, false), (RBPoffset - scopeStart ))); // reclaim stack space
 		RBPoffset = scopeStart; // set RBP offset to where it was prior to scope.
 		return null;
@@ -286,8 +287,13 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		stmt.varDecl.visit(this, null);
 		//get value of exp
 		stmt.initExp.visit(this, null);
+
 		_asm.add( new Pop(Reg64.RAX) ); // have to get value from the expression  EXP IN RAX
-		_asm.add(new Mov_rmr(new R(Reg64.RBP, stmt.varDecl.entityOffset, Reg64.RAX))); // move value RAX to [RBP - offset]
+		//_asm.add(new Xor(new R(Reg64.RDX, Reg64.RDX)));
+		//_asm.add(new Mov_rmr(new R(Reg64.RBP, Reg64.RDX,1,stmt.varDecl.entityOffset, Reg64.RAX))); // move value RAX to [RBP - offset]
+		//_asm.add( new Mov_rrm(new R(Reg64.RDX, Reg64.RBP)));
+
+		//_asm.add(new Mov_rmr(new R(Reg64.RBP, stmt.varDecl.entityOffset ,Reg64.RAX))); // move value RAX to [RBP - offset]
 		return null;
 	}
 
