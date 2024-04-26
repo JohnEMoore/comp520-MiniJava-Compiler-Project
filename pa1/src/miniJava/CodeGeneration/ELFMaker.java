@@ -38,7 +38,7 @@ public class ELFMaker {
 		// next is the .text
 		text.sectionName = ".text";
 		text.sh_size = textSize;
-		text.sh_flags = SHF_EXECINSTR + SHF_ALLOC; // TODO: what flags does the text section get?
+		text.sh_flags = SHF_EXECINSTR | SHF_ALLOC; // TODO: what flags does the text section get?
 		text.sh_type = SHT_PROGBITS; // TODO: what type is the text section?
 		text.data = new byte[1]; // placeholder, do not change
 		sections.add( text );
@@ -48,13 +48,13 @@ public class ELFMaker {
 		bss.data = null;
 		bss.sh_size = bssSize;
 		bss.sh_type = SHT_NOBITS; // TODO: what type is the bss section?
-		bss.sh_flags = SHF_WRITE + SHF_ALLOC; // TODO: what are the flags of the bss section?
+		bss.sh_flags = SHF_WRITE | SHF_ALLOC; // TODO: what are the flags of the bss section?
 		sections.add( bss );
 		
 		// make .shstrtab
 		shstrtab.sectionName = ".shstrtab";
 		shstrtab.sh_type = SHT_STRTAB; // TODO: what is the type of the shstrtab section?
-		shstrtab.sh_flags = SHT_STRTAB; // TODO: what are the flags of this section?
+		shstrtab.sh_flags = 0; // TODO: what are the flags of this section?
 		sections.add( shstrtab );
 		shstrtab.data = makeSectionStrings(sections);
 		shstrtab.sh_size = shstrtab.data.length;
@@ -94,7 +94,7 @@ public class ELFMaker {
 		
 		text.data = textSection;
 		
-		phdr.p_type = PT_DYNAMIC; // TODO: what is the type of the program header segment?
+		phdr.p_type = PT_PHDR; // TODO: what is the type of the program header segment?
 		phdr.p_flags = PF_R; // TODO: what are the flags of the program header segment?
 		phdr.p_offset = phStartAddress;
 		phdr.p_vaddr = phStartAddress;
@@ -102,7 +102,7 @@ public class ELFMaker {
 		phdr.p_filesz = segments.size() * elf.e_phentsize;
 		phdr.p_memsz = phdr.p_filesz;
 
-		textSeg.p_type = SHT_PROGBITS; // TODO: type of the text segment?
+		textSeg.p_type = PT_LOAD; // TODO: type of the text segment?
 		textSeg.p_flags = PF_X + PF_R; // TODO: flags for the text segment?
 		textSeg.p_offset = text.sh_offset;
 		textSeg.p_vaddr = text.sh_addr;

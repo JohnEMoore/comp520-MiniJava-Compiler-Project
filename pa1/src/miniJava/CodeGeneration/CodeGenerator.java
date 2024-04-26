@@ -117,8 +117,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		
 
 		ClassDeclList cl = prog.classDeclList;
-		_asm.add( new Mov_rmr(		new R(Reg64.R15,Reg64.RSP)) 	); // set reg 15 to current location
-		_asm.add(new Sub( new R(Reg64.R15, true), 8)); // set R15 to be at the location of the next thing I push (static var)
+
 
 		for (ClassDecl c: prog.classDeclList){
 			c.visit(this, null);
@@ -167,6 +166,13 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitMethodDecl(MethodDecl m, Object arg){
+
+
+		_asm.add( new Push(Reg64.RBP));
+		_asm.add( new Mov_rrm(new R( Reg64.RBP, Reg64.RSP)));
+
+
+
 		RBPoffset = -8; // resets RBP offset at start of method, need to get trimmed to pass all classes
 
 		if(m.name.equals("main") &&  m.isStatic && !m.isPrivate && m.parameterDeclList.size() == 1 &&  m.parameterDeclList.get(0).type.getClass() == ArrayType.class && ((ArrayType)  m.parameterDeclList.get(0).type).eltType.getClass() == ClassType.class && ((ClassType) ((ArrayType)  m.parameterDeclList.get(0).type).eltType ).className.spelling.equals("String")){
@@ -204,6 +210,16 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		for (Statement s: sl) {
 			s.visit(this, null);
 		}
+
+
+		_asm.add( new Mov_rrm(new R( Reg64.RSP, Reg64.RBP )));
+		_asm.add( new Pop(Reg64.RBP)); // set RBP to old rbp stored at rbp"\x48\x89\x6D\x00"
+		//_asm.add(new Pop(Reg64.RIP)); // old instruction
+		//_asm.(new Jmp(Reg64.RAX))
+		short onStack = (short) (m.parameterDeclList.size() + ( m.isStatic || m.name.equals("println") ? 0 : 1));
+		System.out.println(onStack);
+		_asm.add(new Ret(onStack, (short) 8));
+
 		if(m.instructionLocation == mainLoc){
 			_asm.add( new Mov_rmi(new R(Reg64.RAX,true),60) );
 			_asm.add( new Mov_rmi(new R(Reg64.RDI,true),0) );
@@ -211,11 +227,6 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 			return null;
 		}
-		_asm.add( new Mov_rrm(new R( Reg64.RSP, Reg64.RBP )));
-		_asm.add( new Pop(Reg64.RBP)); // set RBP to old rbp stored at rbp"\x48\x89\x6D\x00"
-		_asm.add(new Pop(Reg64.RIP)); // old instruction
-		short onStack = (short) (m.parameterDeclList.size() + (m.isStatic ? 0 : 1));
-		_asm.add(new Ret(onStack, (short) 8));
 
 		return null;
 	}
@@ -321,6 +332,8 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 		boolean temp = isStatic;
 		//_asm.add( new Pop(Reg64.RAX) );
+
+
 		if(!temp){
 			stmt.methodRef.visit(this, true);
 			/*
@@ -338,7 +351,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		}
 
 		if(lastMethod.name.equals("println")){
-
+			_asm.add(new Pop(Reg64.RCX));
 			makePrintln();
 
 			return null;
@@ -550,16 +563,16 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	public Object visitCallExpr(CallExpr expr, Object arg){
 
 		expr.functionRef.visit(this, true); // have to find if static
-		_asm.add( new Pop(Reg64.RCX) ); // put addy in RCX
+		_asm.add( new Pop(Reg64.R9) ); // put addy in RCX
 		ExprList al = expr.argList;
 		for (int i = al.size() -1; i >= 0; i--) {
 			al.get(i).visit(this, null);
 			_asm.add( new Push(Reg64.RAX) ); //load params onto stack in reverse order
 		}
 		//TODO check if method isnt static and if so, push object pointer onto stack
-		if(isStatic){
-			_asm.add( new Pop(Reg64.RAX) );
-			_asm.add( new Push(Reg64.RAX) );
+		if(isStatic && !lastMethod.name.equals("println")){
+
+			_asm.add( new Push(Reg64.R9) );
 		}
 
 		// instruction location
