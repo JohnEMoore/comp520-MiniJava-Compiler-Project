@@ -17,7 +17,7 @@ public class QualRef extends Reference {
 
 	@Override
 	public <A, R> R visit(Visitor<A, R> v, A o) {
-		return v.visitQRef(this, o);
+  		return v.visitQRef(this, o);
 	}
 
 	public Reference ref;

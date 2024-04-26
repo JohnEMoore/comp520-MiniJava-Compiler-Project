@@ -54,7 +54,7 @@ public class ELFMaker {
 		// make .shstrtab
 		shstrtab.sectionName = ".shstrtab";
 		shstrtab.sh_type = SHT_STRTAB; // TODO: what is the type of the shstrtab section?
-		shstrtab.sh_flags = SHF_STRINGS; // TODO: what are the flags of this section?
+		shstrtab.sh_flags = SHT_STRTAB; // TODO: what are the flags of this section?
 		sections.add( shstrtab );
 		shstrtab.data = makeSectionStrings(sections);
 		shstrtab.sh_size = shstrtab.data.length;
@@ -94,7 +94,7 @@ public class ELFMaker {
 		
 		text.data = textSection;
 		
-		phdr.p_type = PT_PHDR; // TODO: what is the type of the program header segment?
+		phdr.p_type = PT_DYNAMIC; // TODO: what is the type of the program header segment?
 		phdr.p_flags = PF_R; // TODO: what are the flags of the program header segment?
 		phdr.p_offset = phStartAddress;
 		phdr.p_vaddr = phStartAddress;
@@ -103,7 +103,7 @@ public class ELFMaker {
 		phdr.p_memsz = phdr.p_filesz;
 
 		textSeg.p_type = SHT_PROGBITS; // TODO: type of the text segment?
-		textSeg.p_flags = PF_X + PF_R +PF_W; // TODO: flags for the text segment?
+		textSeg.p_flags = PF_X + PF_R; // TODO: flags for the text segment?
 		textSeg.p_offset = text.sh_offset;
 		textSeg.p_vaddr = text.sh_addr;
 		textSeg.p_paddr = text.sh_addr;

@@ -5,10 +5,11 @@
  */
 package miniJava.AbstractSyntaxTrees;
 
+import miniJava.CodeGeneration.x64.Reg64;
 import miniJava.SyntacticAnalyzer.SourcePosition;
 
 public class ParameterDecl extends LocalDecl {
-	
+
 	public ParameterDecl(TypeDenoter t, String name, SourcePosition posn){
 		super(name, t, posn);
 	}

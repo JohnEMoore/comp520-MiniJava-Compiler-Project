@@ -55,7 +55,7 @@ public class Compiler {
 						catch (Error e){
 							_errors.reportError(e.toString());
 							System.out.println("Error");
-							_errors.outputErrors();
+								_errors.outputErrors();
 						}
 						System.out.println(disp.SId);
 

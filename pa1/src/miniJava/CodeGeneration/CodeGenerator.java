@@ -38,6 +38,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	public void parse(Package prog) {
 		_asm = new InstructionList();
 		_asm.markOutputStart();
+
 		
 		// If you haven't refactored the name "ModRMSIB" to something like "R",
 		//  go ahead and do that now. You'll be needing that object a lot.
@@ -113,11 +114,12 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	@Override
 	public Object visitPackage(Package prog, Object arg) {
 		// TODO: visit relevant parts of our AST
-
+		
 
 		ClassDeclList cl = prog.classDeclList;
 		_asm.add( new Mov_rmr(		new R(Reg64.R15,Reg64.RSP)) 	); // set reg 15 to current location
 		_asm.add(new Sub( new R(Reg64.R15, true), 8)); // set R15 to be at the location of the next thing I push (static var)
+
 		for (ClassDecl c: prog.classDeclList){
 			c.visit(this, null);
 		}
@@ -161,13 +163,11 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitFieldDecl(FieldDecl f, Object arg){
-		f.type.visit(this, null);
 		return null;
 	}
 
 	public Object visitMethodDecl(MethodDecl m, Object arg){
 		RBPoffset = -8; // resets RBP offset at start of method, need to get trimmed to pass all classes
-		m.type.visit(this, null); // dont think this matters
 
 		if(m.name.equals("main") &&  m.isStatic && !m.isPrivate && m.parameterDeclList.size() == 1 &&  m.parameterDeclList.get(0).type.getClass() == ArrayType.class && ((ArrayType)  m.parameterDeclList.get(0).type).eltType.getClass() == ClassType.class && ((ClassType) ((ArrayType)  m.parameterDeclList.get(0).type).eltType ).className.spelling.equals("String")){
 			mainLoc = _asm.getSize();
@@ -176,7 +176,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		methodAddresses.put(m, m.instructionLocation);
 		ArrayList<Instruction> missing = missingLocations.getOrDefault(m, new ArrayList<>());
 		for(int k = 0; k < missing.size(); k++){
-			_asm.patch( missing.get(k).listIdx, new Jmp(_asm.getSize() - missing.get(k).startAddress - 4) );
+			_asm.patch( missing.get(k).listIdx, new Call(_asm.getSize() - missing.get(k).startAddress - 4) );
 		}
 		methodAddresses.put(m, m.instructionLocation); // think this doesnt matterb ut i dont care
 		m.instructionLocation = _asm.getSize();
@@ -186,7 +186,8 @@ public class CodeGenerator implements Visitor<Object, Object> {
 			ParameterDeclList pdl = m.parameterDeclList;
 			int i = 16; // first param is at RBP + 16
 			if (!m.isStatic) {
-				// get this ref at RBP + 16
+				//get this ref at RBP + 16
+
 				i += 8;
 			}
 
@@ -211,7 +212,8 @@ public class CodeGenerator implements Visitor<Object, Object> {
 			return null;
 		}
 		_asm.add( new Mov_rrm(new R( Reg64.RSP, Reg64.RBP )));
-		_asm.add( new Pop(Reg64.RBP)); // "\x48\x89\x6D\x00"
+		_asm.add( new Pop(Reg64.RBP)); // set RBP to old rbp stored at rbp"\x48\x89\x6D\x00"
+		_asm.add(new Pop(Reg64.RIP)); // old instruction
 		short onStack = (short) (m.parameterDeclList.size() + (m.isStatic ? 0 : 1));
 		_asm.add(new Ret(onStack, (short) 8));
 
@@ -219,13 +221,11 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitParameterDecl(ParameterDecl pd, Object arg){
-		pd.type.visit(this, null);
 
 		return null;
 	}
 
 	public Object visitVarDecl(VarDecl vd, Object arg){
-		//vd.type.visit(this, null);
 		_asm.add( new Push(0) ); // push var on to stack
 		vd.entityOffset = RBPoffset; // set offset location and decrement offset
 		RBPoffset -= 8;
@@ -249,7 +249,6 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitArrayType(ArrayType type, Object arg){
-		type.eltType.visit(this, null);
 		return null;
 	}
 
@@ -276,7 +275,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		stmt.varDecl.visit(this, null);
 		//get value of exp
 		stmt.initExp.visit(this, null);
-		//_asm.add( new Pop(Reg64.RAX) ); // have to get value from the expression  EXP IN RAX
+		_asm.add( new Pop(Reg64.RAX) ); // have to get value from the expression  EXP IN RAX
 		_asm.add(new Mov_rmr(new R(Reg64.RBP, stmt.varDecl.entityOffset, Reg64.RAX))); // move value RAX to [RBP - offset]
 		return null;
 	}
@@ -309,36 +308,59 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitCallStmt(CallStmt stmt, Object arg){
-		stmt.methodRef.visit(this, true);
-		_asm.add( new Pop(Reg64.RBX) ); // get location of method instance
+
+		// get location of method instance
 		ExprList al = stmt.argList;
+
 
 
 		for (int i = al.size() -1; i >= 0; i--) {
 			al.get(i).visit(this, null);
-			_asm.add( new Push(Reg64.RAX) ); //load params onto stack in reverse order
+			// already on stack from expr _asm.add( new Push(Reg64.RAX) ); //load params onto stack in reverse order
+		}
+
+		boolean temp = isStatic;
+		//_asm.add( new Pop(Reg64.RAX) );
+		if(!temp){
+			stmt.methodRef.visit(this, true);
+			/*
+			i think this implementation works fine and gets the info
+			if (((QualRef) stmt.methodRef).ref.getClass() == QualRef.class){
+				((QualRef) stmt.methodRef).ref.visit(this, true);
+			}
+			else{
+				((QualRef) stmt.methodRef).ref.visit(this, true); // identical but i think this works either way because this and qual both put on stack
+			}
+
+			 */
+
+
+		}
+
+		if(lastMethod.name.equals("println")){
+
+			makePrintln();
+
+			return null;
 		}
 
 		//TODO check if method isnt static and if so, push object pointer onto stack
-		boolean temp = isStatic;
-		_asm.add( new Pop(Reg64.RAX) );
-		if(temp){
 
-			_asm.add( new Push(Reg64.RAX) );
-		}
+		_asm.add(new Push(Reg64.RIP));
+
 		//_asm.add(new Push(Reg64.RBP));
 		// instruction location
 		//_asm.add( new Pop(Reg64.RBX) );
 		if(lastMethod != null) {
 			if (lastMethod.instructionLocation == -1) { // location unknown
-				Instruction toMethod = new Jmp(0);
+				Instruction toMethod = new Call(0); // change h
 				_asm.add(toMethod); //populates instruction fields
 				ArrayList<Instruction> curList = missingLocations.getOrDefault(lastMethod, new ArrayList<>());
 				curList.add(toMethod);
 				missingLocations.put(lastMethod, curList);
 				_asm.add(toMethod);
-			} else {
-				Instruction toMethod = new Jmp(_asm.getSize(), lastMethod.instructionLocation, false);
+			} else if (lastMethod.instructionLocation != -2 ){
+				Instruction toMethod = new Call(_asm.getSize(), lastMethod.instructionLocation);
 				_asm.add(toMethod);
 			}
 		}
@@ -369,7 +391,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		stmt.thenStmt.visit(this, null);
 		Instruction elseJump = (new Jmp( 0)); // to jump past the else stmt
 		_asm.add(elseJump);
-		_asm.patch( condJump.listIdx, new Jmp(_asm.getSize() - condJump.startAddress - 4) );
+		_asm.patch( condJump.listIdx, new CondJmp(Condition.NE, _asm.getSize() - condJump.startAddress - 4) );
 		if (stmt.elseStmt != null) {
 			stmt.elseStmt.visit(this, null);
 		}
@@ -389,7 +411,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 		Instruction retJump = (new Jmp( starter - _asm.getSize())); // to jump past the else stmt
 		_asm.add(retJump);
-		_asm.patch( condJump.listIdx, new Jmp(_asm.getSize() - condJump.startAddress - 4) );
+		_asm.patch( condJump.listIdx, new CondJmp(Condition.NE, _asm.getSize() - condJump.startAddress - 4) );
 		return null;
 	}
 
@@ -400,26 +422,23 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	///////////////////////////////////////////////////////////////////////////////
 
 	public Object visitUnaryExpr(UnaryExpr expr, Object arg){
-		expr.operator.visit(this, null);
+
 		expr.expr.visit(this, null); // RAX is condition value
-		//_asm.add( new Pop(Reg64.RAX) ); // have to get value from the expression for expr.expr
+		_asm.add( new Pop(Reg64.RAX) ); // have to get value from the expression for expr.expr
 		if(expr.operator.spelling.equals("!")){
 			_asm.add(new Not(new R(Reg64.RAX, false)));
 		}
 		else{ //  -
 			_asm.add(new Neg(new R(Reg64.RAX, false)));
 		}
-		//_asm.add(new Push(new R(Reg64.RSP, Reg64.RAX))); // store result on stack STORED IN RAX
+		_asm.add(new Push(Reg64.RAX)); // store result on stack STORED IN RAX
 
 		return null;
 	}
 
 	public Object visitBinaryExpr(BinaryExpr expr, Object arg){
-		expr.operator.visit(this, null);
 		expr.left.visit(this, null);
-		_asm.add(new Push(Reg64.RAX)); // store result on stack
 		expr.right.visit(this, null);
-		_asm.add(new Push( Reg64.RAX)); // store result on stack
 
 
 		switch (expr.operator.spelling){
@@ -428,31 +447,37 @@ public class CodeGenerator implements Visitor<Object, Object> {
 				_asm.add( new Pop(Reg64.RCX) ); // put top of stack (rhs result) in rcx
 				_asm.add( new Pop(Reg64.RAX) ); // put top of stack (lhs result) in rax
 				_asm.add( new And( new R(Reg64.RAX, Reg64.RCX)));
+				_asm.add(new Push(Reg64.RAX));
 				break;
 			case "||":
 				_asm.add( new Pop(Reg64.RCX) ); // put top of stack (rhs result) in rcx
 				_asm.add( new Pop(Reg64.RAX) ); // put top of stack (lhs result) in rax
 				_asm.add( new Or( new R(Reg64.RAX, Reg64.RCX)));
+				_asm.add(new Push(Reg64.RAX));
 				break;
 			case "+":
 				_asm.add( new Pop(Reg64.RCX) ); // put top of stack (rhs result) in rcx
 				_asm.add( new Pop(Reg64.RAX) ); // put top of stack (lhs result) in rax
 				_asm.add( new Add( new R(Reg64.RAX, Reg64.RCX)));
+				_asm.add(new Push(Reg64.RAX));
 				break;
 			case"-":
 				_asm.add( new Pop(Reg64.RCX) ); // put top of stack (rhs result) in rcx
 				_asm.add( new Pop(Reg64.RAX) ); // put top of stack (lhs result) in rax
 				_asm.add( new Sub( new R(Reg64.RAX, Reg64.RCX)));
+				_asm.add(new Push(Reg64.RAX));
 				break;
 			case"*":
 				_asm.add( new Pop(Reg64.RCX) ); // put top of stack (rhs result) in rcx
 				_asm.add( new Pop(Reg64.RAX) ); // put top of stack (lhs result) in rax
 				_asm.add( new Imul( new R(Reg64.RAX, Reg64.RCX)));
+				_asm.add(new Push(Reg64.RAX));
 				break;
 			case"/":
 				_asm.add( new Pop(Reg64.RCX) ); // put top of stack (rhs result) in rcx
 				_asm.add( new Pop(Reg64.RAX) ); // put top of stack (lhs result) in rax
 				_asm.add( new Idiv( new R(Reg64.RAX, Reg64.RCX)));
+				_asm.add(new Push(Reg64.RAX));
 				break;
 			case ">":
 				_asm.add( new Pop(Reg64.RCX) ); // set RCX rhs
@@ -460,6 +485,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 				_asm.add( new Xor( new R(Reg64.RAX, Reg64.RAX))); // RAX to 0
 				_asm.add( new Cmp( new R(Reg64.RBX, Reg64.RCX))); //perform comparison
 				_asm.add(new SetCond(Condition.GT, Reg8.AL)); // 1 byte bool in RAX
+				_asm.add(new Push(Reg64.RAX));
 				break;
 			case "<":
 				_asm.add( new Pop(Reg64.RCX) );
@@ -467,6 +493,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 				_asm.add( new Xor( new R(Reg64.RAX, Reg64.RAX)));
 				_asm.add( new Cmp( new R(Reg64.RBX, Reg64.RCX)));
 				_asm.add(new SetCond(Condition.LT, Reg8.AL));
+				_asm.add(new Push(Reg64.RAX));
 				break;
 			case "<=":
 				_asm.add( new Pop(Reg64.RCX) );
@@ -474,6 +501,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 				_asm.add( new Xor( new R(Reg64.RAX, Reg64.RAX)));
 				_asm.add( new Cmp( new R(Reg64.RBX, Reg64.RCX)));
 				_asm.add(new SetCond(Condition.LTE, Reg8.AL));
+				_asm.add(new Push(Reg64.RAX));
 				break;
 			case ">=":
 				_asm.add( new Pop(Reg64.RCX) );
@@ -481,6 +509,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 				_asm.add( new Xor( new R(Reg64.RAX, Reg64.RAX)));
 				_asm.add( new Cmp( new R(Reg64.RBX, Reg64.RCX)));
 				_asm.add(new SetCond(Condition.GTE, Reg8.AL));
+				_asm.add(new Push(Reg64.RAX));
 				break;
 			case "==":
 				_asm.add( new Pop(Reg64.RCX) );
@@ -495,6 +524,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 				_asm.add( new Xor( new R(Reg64.RAX, Reg64.RAX)));
 				_asm.add( new Cmp( new R(Reg64.RBX, Reg64.RCX)));
 				_asm.add(new SetCond(Condition.NE, Reg8.AL));
+				_asm.add(new Push(Reg64.RAX));
 				break;
 
 		}
@@ -505,7 +535,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	public Object visitRefExpr(RefExpr expr, Object arg){
 		expr.ref.visit(this, Boolean.FALSE);
 
-		//expr expected to return value in RAX
+		//value should still be in stack
 		return null;
 	}
 
@@ -564,7 +594,6 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitNewArrayExpr(NewArrayExpr expr, Object arg){
-		expr.eltType.visit(this, null);
 		expr.sizeExpr.visit(this, null);
 		int firstInstIdx = makeMalloc();
 		// addy in RAX
@@ -572,7 +601,6 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitNewObjectExpr(NewObjectExpr expr, Object arg){
-		expr.classtype.visit(this, null);
 		int firstInstIdx = makeMalloc();
 		return null;
 	}
@@ -593,39 +621,70 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	public Object visitThisRef(ThisRef ref, Object arg) {
 		if(arg == Boolean.TRUE){ //true means getting address (assign statements, qualref)
 			_asm.add(new Lea(new R(ref.entityRef, ref.entityOffset, Reg64.RAX)));
-			_asm.add(new Push(Reg64.RAX)); // put mem loc on stack
+			 // put mem loc on stack
 		}
 		else{ // false means getting value in address (ref expressions)
-			_asm.add(new Mov_rrm(new R(ref.entityRef, ref.entityOffset, Reg64.RAX)));
+			_asm.add(new Mov_rrm(new R(Reg64.RBP, +16, Reg64.RAX)));
+
 			//_asm.add(new Push(Reg64.RAX));
 		}
+		_asm.add(new Push(Reg64.RAX));
 		return null;
 	}
 
 	public Object visitIdRef(IdRef ref, Object arg) {
-		ref.id.visit(this, null);
-
+		//ref.id.visit(this, null);
 
 
 		if( ref.id.decl.getClass() == FieldDecl.class) {
 
 			if (((FieldDecl) ref.id.decl).isStatic) {
 				isStatic = true;
+
+
+
 			} else {
 				isStatic = false;
 			}
+			if(arg == Boolean.TRUE) {
+				_asm.add(new Lea(new R( ((FieldDecl) ref.id.decl).entityRef, ((FieldDecl)  ref.id.decl).entityOffset, Reg64.RAX) ));
 
-			if(ref.getClass() == IdRef.class){
-				_asm.add(new Mov_rrm(new R( ((FieldDecl) ((IdRef) ref).id.decl).entityRef, ((FieldDecl) ((IdRef) ref).id.decl).entityOffset, Reg64.RAX) ));
+			}
+			else if(arg==Boolean.FALSE) {
+				_asm.add(new Mov_rrm(new R(((FieldDecl)  ref.id.decl).entityRef, ((FieldDecl)  ref.id.decl).entityOffset, Reg64.RAX)));
+
+			}
+
+			_asm.add(new Push(Reg64.RAX));
+			return null;
+
+			}
+
+		if( ref.id.decl.getClass() == ParameterDecl.class) {
+			if(arg == Boolean.TRUE){ //true means getting address (assign statements, qualref)
+				if(ref.getClass() == IdRef.class){
+					_asm.add(new Lea(new R( ((ParameterDecl) ref.id.decl).entityRef, ((ParameterDecl) ((IdRef) ref).id.decl).entityOffset, Reg64.RAX) ));
+					_asm.add(new Push(Reg64.RAX));
+				}
+				else {
+					_asm.add(new Lea(new R(ref.entityRef, ref.entityOffset, Reg64.RAX)));
+					_asm.add(new Push(Reg64.RAX)); // put mem loc on stack
+				}
+
+			}
+			else if(arg==Boolean.FALSE){ // false means getting value in address (ref expressions)
+				if(ref.getClass() == IdRef.class){
+					_asm.add(new Mov_rrm(new R( ((ParameterDecl)  ref.id.decl).entityRef, ((ParameterDecl) ((IdRef) ref).id.decl).entityOffset, Reg64.RAX) ));
+					//_asm.add(new Push(Reg64.RAX));
+				}
+				else {
+					_asm.add(new Mov_rrm(new R(ref.entityRef, ref.entityOffset, Reg64.RAX)));
+				}
 				_asm.add(new Push(Reg64.RAX));
 			}
-			else {
-				_asm.add(new Mov_rrm(new R(ref.entityRef, ref.entityOffset, Reg64.RAX)));
-			}
+			return null;
 
-
-
-			}
+		}
 
 
 		if(arg == Boolean.TRUE){ //true means getting address (assign statements, qualref)
@@ -637,16 +696,17 @@ public class CodeGenerator implements Visitor<Object, Object> {
 				_asm.add(new Lea(new R(ref.entityRef, ref.entityOffset, Reg64.RAX)));
 				_asm.add(new Push(Reg64.RAX)); // put mem loc on stack
 			}
-			_asm.add(new Push(Reg64.RAX));
+
 		}
 		else if(arg==Boolean.FALSE){ // false means getting value in address (ref expressions)
 			if(ref.getClass() == IdRef.class){
-				_asm.add(new Mov_rrm(new R( ((VarDecl) ((IdRef) ref).id.decl).entityRef, ((VarDecl) ((IdRef) ref).id.decl).entityOffset, Reg64.RAX) ));
-				_asm.add(new Push(Reg64.RAX));
+				_asm.add(new Mov_rrm(new R( ((VarDecl)  ref.id.decl).entityRef, ((VarDecl) ((IdRef) ref).id.decl).entityOffset, Reg64.RAX) ));
+				//_asm.add(new Push(Reg64.RAX));
 			}
 			else {
 				_asm.add(new Mov_rrm(new R(ref.entityRef, ref.entityOffset, Reg64.RAX)));
 			}
+			_asm.add(new Push(Reg64.RAX));
 		}
 		return null;
 	}
@@ -655,10 +715,8 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 		if (qr.id.decl.getClass() == MethodDecl.class){
 
-
 			lastMethod = (MethodDecl) qr.id.decl;
 			//_asm.add(new Push(Reg64.RCX));
-
 
 
 			if(qr.id.spelling.equals("println")){
@@ -667,16 +725,14 @@ public class CodeGenerator implements Visitor<Object, Object> {
 				_asm.add(new Push(0));
 				return null;
 			}
+
 			//qr.id.visit(this, Boolean.FALSE); // instruction location now on stack
 			if (((MethodDecl) qr.id.decl).isStatic){
 				isStatic = true;
-				qr.ref.visit(this, Boolean.TRUE); // get address of instance it will be on stack
-
-
 			}
 			else{
 				qr.ref.visit(this, Boolean.TRUE); // get address of instance it will be on stack
-				qr.id.visit(this, arg);
+				//qr.id.visit(this, arg);
 				_asm.add( new Pop(Reg64.RCX) );
 				_asm.add( new Pop(Reg64.RAX) );
 				_asm.add(new Mov_rrm( new R(Reg64.RAX, 0, Reg64.RCX) ));
@@ -702,12 +758,12 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		if(arg == Boolean.TRUE){ //true means getting address (assign statements, qualref)
 			//_asm.add( new Pop(Reg64.RAX) );
 			_asm.add(new Lea(new R(Reg64.RCX, qr.ref.entityOffset, Reg64.RAX)));
-			_asm.add(new Push(Reg64.RAX)); // put mem loc on stack
 		}
 		else{ // false means getting value in address (ref expressions)
 			_asm.add(new Mov_rrm(new R(Reg64.RCX, qr.ref.entityOffset, Reg64.RAX)));
-			//_asm.add(new Push(Reg64.RAX));
+		;
 		}
+		_asm.add(new Push(Reg64.RAX));
 
 		return null;
 	}
@@ -732,15 +788,18 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		//_asm.add( new Mov_rmi(new R(Reg64.RAX,true), Integer.parseInt(num.spelling)));
 		int stuff = parseInt(num.spelling);
 		_asm.add( new Mov_rmi(new R(Reg64.RAX,true), stuff));
+		_asm.add(new Push(Reg64.RAX));
 		return null;
 	}
 
 	public Object visitBooleanLiteral(BooleanLiteral bool, Object arg){
 		if(bool.spelling.equals("true")){
 			_asm.add( new Mov_rmi(new R(Reg64.RAX,true), 0x1));
+			_asm.add(new Push(Reg64.RAX));
 		}
 		else{
 			_asm.add( new Mov_rmi(new R(Reg64.RAX,true), 0x0));
+			_asm.add(new Push(Reg64.RAX));
 		}
 
 		return null;
@@ -748,6 +807,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 	public Object visitNullLiteral (NullLiteral n1, Object arg){
 		_asm.add( new Mov_rmi(new R(Reg64.RAX,true), 0));
+		_asm.add(new Push(Reg64.RAX));
 		return null;
 	}
 
@@ -785,11 +845,14 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		// TODO: how can we generate the assembly to println?
 		_asm.add( new Mov_rmi(new R(Reg64.RAX,true),0x01) );
 		_asm.add( new Mov_rmi(new R(Reg64.RDI,true),0x01) ); // call 1 WRITE
-		_asm.add( new Mov_rrm(new R(Reg64.RSI, -8,Reg64.RBP) ));
-		_asm.add( new Add(new R(Reg64.RSI, true), 48)); // TODO function arg + 48 into RSI
+		//_asm.add( new Lea(new R(Reg64.RSP, 0, Reg64.RSI) ));
+		_asm.add( new Xor(new R(Reg64.RDX,Reg64.RDX)) ) ;
+		_asm.add( new Lea(new R(Reg64.RSP, Reg64.RDX, 1,0, Reg64.RSI)));
+		//_asm.add( new Add(new R(Reg64.RSI, true), 48)); // TODO function arg + 48 into RSI
 		//_asm.add( new Mov_rmi(	new R(Reg64.RSI,true),0x1000) ); // character
-		_asm.add( new Mov_rmi(	new R(Reg64.RDX,true),0x02) 	);
+		_asm.add( new Mov_rmi(	new R(Reg64.RDX,true),0x01) 	);
 		_asm.add( new Syscall() );
+		_asm.add(new Pop(Reg64.RAX));
 
 
 		return -1;

@@ -210,13 +210,14 @@ public class R {
 		ss = mult == 1 ? 00 : mult == 2 ? 01 : mult == 4 ? 10 : 11;
 		mod = disp == 0 ? 0 : disp < 256 ? 1 : 2;
 		// double check vals
-		regByte = (mod<<6) | (getIdx(r) <<3 )  | 5;
+		regByte = (mod<<6) | (getIdx(r) <<3 )  | 4;
 
-		int sib = (ss << 6)  | getIdx(rdisp) | getIdx(ridx);
+		int sib = (ss << 6)  | getIdx(ridx) <<3 | getIdx(rdisp);
 
 		_b.write( regByte );
 		_b.write( sib);
-		_b.write( disp );
+		if(disp != 0)
+			_b.write( disp );
 	}
 	
 	// [disp],r
