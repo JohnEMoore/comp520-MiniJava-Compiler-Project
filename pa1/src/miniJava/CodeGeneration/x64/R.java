@@ -159,12 +159,14 @@ public class R {
 	private void Make(Reg64 rdisp, int disp, Reg r) {
 		// TODO: construct the byte and write to _b
 		// Operands: [rdisp+disp],r
-		int mod = disp == 0 ? 0 : disp < 256 ? 1 : 2;
+		//int mod = disp == 0 ? 0 : disp < 127 && disp > -129 ? 1 : 2;
+		int mod = disp < 127 && disp > -129 ? 1 : 2;
 		int regByte;
 
 		regByte = (mod<<6) | (getIdx(r) <<3 )  | getIdx(rdisp);
 
 		_b.write( regByte );
+
 		_b.write( disp );
 
 	}

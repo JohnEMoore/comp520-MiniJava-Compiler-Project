@@ -35,6 +35,13 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		System.out.println(_asm.get(i));
 	}
 
+
+	int mainStart = 0;
+	Instruction premainJump = new Jmp(0);
+	Instruction postmaining = new Jmp(0);
+	int startAddress = 0;
+	int postSetupReturn = 0;
+
 	public void parse(Package prog) {
 		_asm = new InstructionList();
 		_asm.markOutputStart();
@@ -114,20 +121,31 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	@Override
 	public Object visitPackage(Package prog, Object arg) {
 		// TODO: visit relevant parts of our AST
-		
 
+		startAddress = _asm.getSize();
+		System.out.println(startAddress);
 		ClassDeclList cl = prog.classDeclList;
+
+
+
 
 
 		for (ClassDecl c: prog.classDeclList){
 			c.visit(this, null);
 		}
+		_asm.patch(postmaining.listIdx, new Jmp(postmaining.startAddress, mainStart, false));
+
+
 		return null;
 
 	}
 
 	public Object visitClassDecl(ClassDecl clas, Object arg){
 		int i = 0;
+
+		_asm.add(new Xor(new R(Reg64.R12, Reg64.R12)));
+		//_asm.add(new Mov_rmi(new R(Reg64.RBX, true), 80));
+
 
 
 		for (FieldDecl f: clas.fieldDeclList) {
@@ -142,15 +160,21 @@ public class CodeGenerator implements Visitor<Object, Object> {
 			}
 			else{
 				f.visit(this, null);
+
 				f.entityRef = Reg64.R15;
 				f.entityOffset = staticStack;
-				_asm.add( new Push(0) ); // fields are not declared in minijava
+				_asm.add( new Push(Reg64.R12) ); // fields are not declared in minijava
 				staticStack -= 8;
 
 
 			}
 
 		}
+		_asm.add(postmaining);
+
+
+
+
 
 		// visit all methodDecls, generate their code, if there is a call to a
 		for (MethodDecl m: clas.methodDeclList) {
@@ -167,25 +191,37 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitMethodDecl(MethodDecl m, Object arg){
+		m.instructionLocation = _asm.getSize();
+		if(m.name.equals("main") &&  m.isStatic && !m.isPrivate && m.parameterDeclList.size() == 1 &&  m.parameterDeclList.get(0).type.getClass() == ArrayType.class && ((ArrayType)  m.parameterDeclList.get(0).type).eltType.getClass() == ClassType.class && ((ClassType) ((ArrayType)  m.parameterDeclList.get(0).type).eltType ).className.spelling.equals("String")){
+			mainLoc = _asm.getSize();
+			_asm.add(premainJump);
+			_asm.patch(premainJump.listIdx, new Jmp(-_asm.getSize()));
+			mainStart = _asm.getSize();
+
+
+		}
+
+
+		methodAddresses.put(m, m.instructionLocation);
+		ArrayList<Instruction> missing = missingLocations.getOrDefault(m, new ArrayList<>());
+		for(int k = 0; k < missing.size(); k++){
+			_asm.patch( missing.get(k).listIdx, new Call(_asm.getSize() - missing.get(k).startAddress - 5) );
+		}
+		//methodAddresses.put(m, m.instructionLocation); // think this doesnt matterb ut i dont care
+		//.instructionLocation = _asm.getSize();
+		System.out.println(mainLoc);
+
+
+		System.out.println(_asm.getSize());
 		_asm.add( new Push(Reg64.RBP));
-		_asm.add( new Mov_rrm(new R( Reg64.RSP, Reg64.RBP )));;
+		_asm.add( new Mov_rmr(new R( Reg64.RBP, Reg64.RSP )));
+
 
 
 
 
 		RBPoffset = -8; // resets RBP offset at start of method, need to get trimmed to pass all classes
 
-		if(m.name.equals("main") &&  m.isStatic && !m.isPrivate && m.parameterDeclList.size() == 1 &&  m.parameterDeclList.get(0).type.getClass() == ArrayType.class && ((ArrayType)  m.parameterDeclList.get(0).type).eltType.getClass() == ClassType.class && ((ClassType) ((ArrayType)  m.parameterDeclList.get(0).type).eltType ).className.spelling.equals("String")){
-			mainLoc = _asm.getSize();
-		}
-		m.instructionLocation = _asm.getSize();
-		methodAddresses.put(m, m.instructionLocation);
-		ArrayList<Instruction> missing = missingLocations.getOrDefault(m, new ArrayList<>());
-		for(int k = 0; k < missing.size(); k++){
-			_asm.patch( missing.get(k).listIdx, new Call(_asm.getSize() - missing.get(k).startAddress - 4) );
-		}
-		methodAddresses.put(m, m.instructionLocation); // think this doesnt matterb ut i dont care
-		m.instructionLocation = _asm.getSize();
 
 
 		if(m.instructionLocation != mainLoc) {
@@ -237,7 +273,9 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitVarDecl(VarDecl vd, Object arg){
-		_asm.add( new Push(0) ); // push var on to stack
+//		_asm.add( new Push(0) );// push var on to stack
+		_asm.add(new Push(Reg64.R12));
+
 		vd.entityOffset = RBPoffset; // set offset location and decrement offset
 		RBPoffset -= 8;
 		return null;
@@ -277,6 +315,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		}
 
 
+
 		_asm.add( new Sub(		new R(Reg64.RSP, false), (RBPoffset - scopeStart ))); // reclaim stack space
 		RBPoffset = scopeStart; // set RBP offset to where it was prior to scope.
 		return null;
@@ -293,7 +332,8 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		//_asm.add(new Mov_rmr(new R(Reg64.RBP, Reg64.RDX,1,stmt.varDecl.entityOffset, Reg64.RAX))); // move value RAX to [RBP - offset]
 		//_asm.add( new Mov_rrm(new R(Reg64.RDX, Reg64.RBP)));
 
-		//_asm.add(new Mov_rmr(new R(Reg64.RBP, stmt.varDecl.entityOffset ,Reg64.RAX))); // move value RAX to [RBP - offset]
+//		_asm.add(new Mov_rmr(new R(stmt.varDecl.entityRef, stmt.varDecl.entityOffset ,Reg64.RAX))); // move value RAX to [RBP - offset]
+		//_asm.add(new Mov_rmr(new R(stmt.varDecl.entityRef, stmt.varDecl.entityOffset ,Reg64.RAX)));
 		return null;
 	}
 
@@ -305,7 +345,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		stmt.val.visit(this, null);
 		_asm.add( new Pop(Reg64.RCX) ); // have to get value from the ref on stack store in RCX
 
-		_asm.add(new Mov_rmr(new R(Reg64.RCX, 0, Reg64.RAX))); // move value RAX to [<ref location> - offset]
+		_asm.add(new Mov_rmr(new R(stmt.ref.entityRef, stmt.ref.entityOffset, Reg64.RAX))); // move value RAX to [<ref location> - offset]
 		return null;
 	}
 
@@ -410,11 +450,11 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		stmt.thenStmt.visit(this, null);
 		Instruction elseJump = (new Jmp( 0)); // to jump past the else stmt
 		_asm.add(elseJump);
-		_asm.patch( condJump.listIdx, new CondJmp(Condition.NE, _asm.getSize() - condJump.startAddress - 4) );
+		_asm.patch( condJump.listIdx, new CondJmp(Condition.NE, _asm.getSize() - condJump.startAddress - 5) );
 		if (stmt.elseStmt != null) {
 			stmt.elseStmt.visit(this, null);
 		}
-		_asm.patch( elseJump.listIdx, new Jmp(_asm.getSize() - elseJump.startAddress - 4) );
+		_asm.patch( elseJump.listIdx, new Jmp(_asm.getSize() - elseJump.startAddress - 5) );
 		return null;
 	}
 
@@ -430,7 +470,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 		Instruction retJump = (new Jmp( starter - _asm.getSize())); // to jump past the else stmt
 		_asm.add(retJump);
-		_asm.patch( condJump.listIdx, new CondJmp(Condition.NE, _asm.getSize() - condJump.startAddress - 4) );
+		_asm.patch( condJump.listIdx, new CondJmp(Condition.NE, _asm.getSize() - condJump.startAddress - 5) );
 		return null;
 	}
 
@@ -741,7 +781,9 @@ public class CodeGenerator implements Visitor<Object, Object> {
 			if(qr.id.spelling.equals("println")){
 				isStatic = false;
 				((MethodDecl) qr.id.decl).instructionLocation = -2;
-				_asm.add(new Push(0));
+				//_asm.add(new Push(0));
+				_asm.add(new Push(Reg64.R12));
+
 				return null;
 			}
 
