@@ -52,6 +52,10 @@ public class ScopedIdentification {
                         ret = siStack.elementAt(1).get( ((ClassType)((FieldDecl) context).type).className.spelling + "." + id.spelling);
                         return ret;
                     }
+
+                    ret = siStack.elementAt(1).get( ((ClassType)((FieldDecl) context).type).className.spelling + "." + id.spelling);
+                    return ret;
+
                 }
                 else if(context.getClass() == VarDecl.class){
                     if (siStack.elementAt(1).get( ((ClassType)((VarDecl) context).type).className.spelling + "." + id.spelling) != null) {

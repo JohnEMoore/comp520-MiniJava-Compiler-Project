@@ -125,7 +125,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		startAddress = _asm.getSize();
 		ClassDeclList cl = prog.classDeclList;
 
-		_asm.add(new Xor(new R(Reg64.R12, Reg64.R12)));
+		//_asm.add(new Xor(new R(Reg64.R12, Reg64.R12)));
 
 
 
@@ -169,7 +169,8 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 					f.entityRef = Reg64.R15;
 					f.entityOffset = staticStack;
-					_asm.add(new Push(Reg64.R12)); // fields are not declared in minijava
+					_asm.add( new Push(0) );
+					//_asm.add(new Push(Reg64.R12)); // fields are not declared in minijava
 					staticStack -= 8;
 
 
@@ -286,8 +287,8 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	public Object visitVarDecl(VarDecl vd, Object arg){
 
 
-//		_asm.add( new Push(0) );// push var on to stack
-		_asm.add(new Push(Reg64.R12));
+		_asm.add( new Push(0) );// push var on to stack
+		//_asm.add(new Push(Reg64.R12));
 		vd.entityRef = Reg64.RBP;
 		vd.entityOffset = RBPoffset; // set offset location and decrement offset
 		RBPoffset -= 8;
@@ -363,12 +364,21 @@ public class CodeGenerator implements Visitor<Object, Object> {
 		// visit reference, returning the location in memory of the object we are assigning to
 		stmt.ref.visit(this, true);
 
-		stmt.val.visit(this, null);
+		stmt.val.visit(this, false);
 		 // have to get value  on stack store in RCX
+		if(stmt.val.getClass() == NewObjectExpr.class){
+			_asm.add( new Push(Reg64.RAX) );
+		}
 		_asm.add( new Pop(Reg64.RAX) );
-		_asm.add( new Pop(Reg64.RCX) );
 
-		_asm.add(new Mov_rmr(new R(Reg64.RCX, 0, Reg64.RAX)));
+		_asm.add(new Pop(Reg64.RCX));
+
+		if(stmt.ref.getClass() == QualRef.class){
+			_asm.add(new Mov_rmr(new R(Reg64.RCX, ((QualRef) stmt.ref).id.entityOffset, Reg64.RAX)));
+		}
+		else {
+			_asm.add(new Mov_rmr(new R(Reg64.RCX, 0, Reg64.RAX)));
+		}
 
 
 		return null;
@@ -813,8 +823,8 @@ public class CodeGenerator implements Visitor<Object, Object> {
 			if(qr.id.spelling.equals("println")){
 				isStatic = false;
 				((MethodDecl) qr.id.decl).instructionLocation = -2;
-				//_asm.add(new Push(0));
-				_asm.add(new Push(Reg64.R12));
+				_asm.add(new Push(0));
+				//_asm.add(new Push(Reg64.R12));
 
 				return null;
 			}
@@ -851,10 +861,11 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 		if(arg == Boolean.TRUE){ //true means getting address (assign statements, qualref)
 			//_asm.add( new Pop(Reg64.RAX) );
-			_asm.add(new Lea(new R(Reg64.RCX, qr.ref.entityOffset, Reg64.RAX)));
+			//_asm.add(new Lea(new R(Reg64.RCX, qr.ref.entityOffset, Reg64.RAX)));
+			_asm.add(new Lea(new R(Reg64.RCX, ((FieldDecl) qr.id.decl).entityOffset, Reg64.RAX)));
 		}
 		else{ // false means getting value in address (ref expressions)
-			_asm.add(new Mov_rrm(new R(Reg64.RCX, qr.ref.entityOffset, Reg64.RAX)));
+			_asm.add(new Mov_rrm(new R(Reg64.RCX, ((FieldDecl) qr.id.decl).entityOffset, Reg64.RAX)));
 		;
 		}
 

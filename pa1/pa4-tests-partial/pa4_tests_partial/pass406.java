@@ -13,8 +13,8 @@ class MainClass {
       f.s.n = 1 + 48;
       
       int tstvar = f.n + f.s.n;
-      
       System.out.println(tstvar);
+
    }
 }
 
