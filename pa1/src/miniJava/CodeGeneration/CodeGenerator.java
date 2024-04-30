@@ -329,7 +329,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 
 
-		_asm.add( new Sub(		new R(Reg64.RSP, false), (RBPoffset - scopeStart ))); // reclaim stack space
+		_asm.add( new Sub(		new R(Reg64.RSP, true), (RBPoffset - scopeStart ))); // reclaim stack space
 		RBPoffset = scopeStart; // set RBP offset to where it was prior to scope.
 		return null;
 	}
@@ -469,7 +469,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	public Object visitIfStmt(IfStmt stmt, Object arg){
 		stmt.cond.visit(this, null); // RAX is equal to 1 or 0
 		_asm.add( new Pop(Reg64.RAX) );
-		_asm.add(new Cmp(new R(Reg64.RAX, false ), 1)); // E generated if condition is true
+		_asm.add(new Cmp(new R(Reg64.RAX, true ), 1)); // E generated if condition is true
 		Instruction condJump = (new CondJmp(Condition.NE, 0));
 		_asm.add(condJump); // placeholder, jumps if not equal
 		int ifStmtStart = _asm.getSize();
@@ -492,15 +492,16 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 		stmt.cond.visit(this, null);
 		_asm.add( new Pop(Reg64.RAX) );
-		_asm.add(new Cmp(new R(Reg64.RAX, false ), 0));
+		_asm.add(new Cmp(new R(Reg64.RAX, true ), 1));
 		Instruction condJumpPast = (new CondJmp(Condition.NE, 0));
 		_asm.add(condJumpPast); // placeholder, jumps if not equal
 		stmt.body.visit(this, null);
-
-
-		Instruction retJump = (new Jmp( starter - _asm.getSize())); // to jump past the else stmt
+		Instruction retJump = (new Jmp( 0));
 		_asm.add(retJump);
-		_asm.patch( condJumpPast.listIdx, new CondJmp(Condition.NE, condJumpPast.startAddress, _asm.getSize(), false ) );
+
+		_asm.patch( retJump.listIdx, new Jmp(retJump.startAddress, starter, false));
+		int whereto = _asm.getSize();
+		_asm.patch( condJumpPast.listIdx, new CondJmp(Condition.NE, condJumpPast.startAddress, whereto, false ) );
 		return null;
 	}
 
@@ -606,6 +607,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 				//_asm.add( new Xor( new R(Reg64.RAX, Reg64.RAX)));
 				_asm.add( new Cmp( new R(Reg64.RAX, Reg64.RCX)));
 				_asm.add(new SetCond(Condition.E, Reg8.AL));
+				_asm.add(new Push(Reg64.RAX));
 				break;
 			case "!=":
 				_asm.add( new Pop(Reg64.RCX) );
@@ -835,8 +837,9 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 
 		}
-		if (qr.id.decl.getClass() == ClassDecl.class) {
 
+		if (qr.id.decl.getClass() == ClassDecl.class) {
+			_asm.add(new Push(Reg64.RAX));
 			return  null;
 		}
 
@@ -854,6 +857,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 			_asm.add(new Mov_rrm(new R(Reg64.RCX, qr.ref.entityOffset, Reg64.RAX)));
 		;
 		}
+
 		_asm.add(new Push(Reg64.RAX));
 
 		return null;
