@@ -338,17 +338,15 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	public Object visitVardeclStmt(VarDeclStmt stmt, Object arg){
 		// location of var added to the decl in visit
 		stmt.varDecl.visit(this, null);
-		if(((VarDeclStmt) stmt).varDecl.type.getClass() == ClassType.class){
+		if(((VarDeclStmt) stmt).varDecl.type.getClass() == ClassType.class || stmt.varDecl.type.getClass() == ArrayType.class) {
 			makeMalloc();
 			_asm.add(new Mov_rmr(new R(stmt.varDecl.entityRef, stmt.varDecl.entityOffset ,Reg64.RAX)));
-			ClassType clas = (ClassType) stmt.varDecl.type;
-			//(FieldDecl f : clas.fieldDeclList)
 
 			return null;
 
 		}
 		//get value of exp
-		stmt.initExp.visit(this, null);
+		stmt.initExp.visit(this, false);
 
 		_asm.add( new Pop(Reg64.RAX) ); // have to get value from the expression  EXP IN RAX
 		//_asm.add(new Xor(new R(Reg64.RDX, Reg64.RDX)));
@@ -386,15 +384,17 @@ public class CodeGenerator implements Visitor<Object, Object> {
 
 	public Object visitIxAssignStmt(IxAssignStmt stmt, Object arg){
 		// visit reference, where ref is the array's pointer to the heap
-		stmt.ref.visit(this, null);
+		stmt.ref.visit(this, true);
 		// visit ix statement, this is an expression that will serve as the offset from the memory location
-		stmt.ix.visit(this, null);
-		_asm.add( new Push(Reg64.RAX));
-		// this is the expression we will assign the value to
-		stmt.exp.visit(this, null);
+		stmt.ix.visit(this, false);
+		stmt.exp.visit(this, false);
+
+		_asm.add( new Pop(Reg64.RAX) ); // expression value
 		_asm.add( new Pop(Reg64.RCX) ); //rcx has the index
 		_asm.add( new Pop(Reg64.RBX) ); // RBX has pointer to array
-		_asm.add(new Mov_rmr(new R(Reg64.RBX, Reg64.RCX, 1, 0, Reg64.RAX)));
+
+
+		_asm.add(new Mov_rmr(new R(Reg64.RBX, Reg64.RCX, 8, 0, Reg64.RAX)));
 
 		return null;
 	}
@@ -500,7 +500,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	public Object visitWhileStmt(WhileStmt stmt, Object arg){
 		int starter = _asm.getSize();
 
-		stmt.cond.visit(this, null);
+		stmt.cond.visit(this, false);
 		_asm.add( new Pop(Reg64.RAX) );
 		_asm.add(new Cmp(new R(Reg64.RAX, true ), 1));
 		Instruction condJumpPast = (new CondJmp(Condition.NE, 0));
@@ -641,10 +641,15 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitIxExpr(IxExpr ie, Object arg){
-		ie.ref.visit(this, null);
-		ie.ixExpr.visit(this, null);
+		ie.ref.visit(this, true);
+		ie.ixExpr.visit(this, false);
+		_asm.add( new Pop(Reg64.RAX) ); // get expression value
 		_asm.add( new Pop(Reg64.RCX) ); // get ref loc
-		_asm.add(new Mov_rmr( new R(Reg64.RAX, Reg64.RCX, 1, 0, Reg64.RAX) )); // 48 8b 04 08
+		//_asm.add(new Mov_rmr( new R(Reg64.RAX, Reg64.RCX, 1, 0, Reg64.RAX) )); // 48 8b 04 08
+
+		_asm.add(new Mov_rrm( new R(Reg64.RCX, Reg64.RAX, 8, 0, Reg64.RBX) )); // 48 8b 04 08
+
+		_asm.add( new Push(Reg64.RBX) );
 		return null;
 	}
 
@@ -695,7 +700,7 @@ public class CodeGenerator implements Visitor<Object, Object> {
 	}
 
 	public Object visitNewArrayExpr(NewArrayExpr expr, Object arg){
-		expr.sizeExpr.visit(this, null);
+		expr.sizeExpr.visit(this, false);
 		int firstInstIdx = makeMalloc();
 		// addy in RAX
 		return null;
