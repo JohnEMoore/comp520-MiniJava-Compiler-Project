@@ -1,3 +1,3 @@
 # comp520-pa-starter
 
-Starter code for PA1 has been uploaded.
+Compiler for "Mini-Java", a subset of the Java programming language.
